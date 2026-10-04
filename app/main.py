@@ -31,7 +31,7 @@ from app.models import (
 )
 from app.services.generator import DebateGeneratorService
 from app.skills.debate_rules import DebateRulesSkill
-
+from app.tos_repository import TosGenerationRepository
 
 SESSION_COOKIE = "debate_buddy_session"
 settings = get_settings()
@@ -43,14 +43,33 @@ logger = logging.getLogger(__name__)
 
 rules_skill = DebateRulesSkill(settings)
 generator_service = DebateGeneratorService(settings, rules_skill)
-generation_repository = (
-    GenerationRepository(settings.database_path, settings.data_retention_days)
-    if settings.enable_local_history
-    else None
-)
 
 
-async def periodic_database_cleanup() -> None:
+def build_generation_repository():
+    if settings.storage_backend == "tos":
+        if not settings.tos_ready:
+            raise RuntimeError(
+                "TOS storage requires BYTEPLUS_AK, BYTEPLUS_SK, TOS_BUCKET, "
+                "TOS_ENDPOINT, and TOS_REGION."
+            )
+        return TosGenerationRepository(
+            access_key=settings.byteplus_ak,
+            secret_key=settings.byteplus_sk,
+            endpoint=settings.tos_endpoint,
+            region=settings.tos_region,
+            bucket=settings.tos_bucket,
+            prefix=settings.tos_prefix,
+            retention_days=settings.data_retention_days,
+        )
+    if settings.storage_backend == "disabled" or not settings.enable_local_history:
+        return None
+    return GenerationRepository(settings.database_path, settings.data_retention_days)
+
+
+generation_repository = build_generation_repository()
+
+
+async def periodic_storage_cleanup() -> None:
     if generation_repository is None:
         return
     interval_seconds = settings.database_cleanup_interval_hours * 60 * 60
@@ -61,7 +80,7 @@ async def periodic_database_cleanup() -> None:
             if deleted:
                 logger.info("Deleted %s expired debate packs", deleted)
         except Exception:
-            logger.exception("Scheduled database cleanup failed")
+            logger.exception("Scheduled storage cleanup failed")
 
 
 @asynccontextmanager
@@ -71,13 +90,13 @@ async def lifespan(_: FastAPI):
         await generation_repository.initialize()
         deleted = await generation_repository.cleanup()
         logger.info(
-            "SQLite temporary storage ready at %s; deleted %s expired packs",
-            settings.database_path,
+            "%s storage ready; deleted %s expired packs",
+            settings.storage_backend.upper(),
             deleted,
         )
-        cleanup_task = asyncio.create_task(periodic_database_cleanup())
+        cleanup_task = asyncio.create_task(periodic_storage_cleanup())
     else:
-        logger.info("Local history storage is disabled")
+        logger.info("Profile and history storage is disabled")
     try:
         status = await rules_skill.load()
         logger.info(
@@ -126,11 +145,11 @@ async def user_session(request: Request, call_next):
     return response
 
 
-def require_history(request: Request) -> tuple[GenerationRepository, UserProfile]:
+def require_history(request: Request):
     if generation_repository is None:
         raise HTTPException(
             status_code=503,
-            detail="Profiles and history are disabled in this stateless deployment.",
+            detail="Profiles and history are disabled in this deployment.",
         )
     return generation_repository, request.state.user
 
@@ -139,7 +158,7 @@ def progress_stream(
     runner: Callable[
         [Callable[[str, int, str, Optional[List[Dict[str, str]]]], None]],
         Awaitable[Any],
-    ]
+    ],
 ) -> StreamingResponse:
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -230,9 +249,15 @@ async def health() -> dict[str, object]:
         "llm_configured": settings.llm_ready,
         "rules_loaded": rules_skill.status.loaded,
         "history_enabled": generation_repository is not None,
+        "storage_backend": (
+            settings.storage_backend
+            if generation_repository is not None
+            else "disabled"
+        ),
         "database_ready": (
             settings.database_path.exists()
             if generation_repository is not None
+            and settings.storage_backend == "sqlite"
             else False
         ),
         "stored_generations": stored_generations,
@@ -259,9 +284,7 @@ async def get_profile(request: Request) -> UserProfile:
 
 
 @app.post("/api/auth/register", response_model=UserProfile)
-async def register(
-    payload: RegisterRequest, request: Request
-) -> UserProfile:
+async def register(payload: RegisterRequest, request: Request) -> UserProfile:
     repository, user = require_history(request)
     try:
         profile, token = await repository.register(
@@ -283,9 +306,7 @@ async def register(
 async def login(payload: LoginRequest, request: Request) -> UserProfile:
     repository, _ = require_history(request)
     try:
-        profile, token = await repository.login(
-            payload.username, payload.password
-        )
+        profile, token = await repository.login(payload.username, payload.password)
     except InvalidCredentialsError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     request.state.user = profile
@@ -316,9 +337,7 @@ async def update_profile(
 
 
 @app.post("/api/generate", response_model=GenerateResponse)
-async def generate(
-    payload: GenerateRequest, request: Request
-) -> GenerateResponse:
+async def generate(payload: GenerateRequest, request: Request) -> GenerateResponse:
     try:
         response = await generator_service.generate(payload)
         if generation_repository is not None:
@@ -326,7 +345,7 @@ async def generate(
                 user = request.state.user
                 await generation_repository.save(user.user_id, payload, response)
             except Exception:
-                logger.exception("Could not save generated debate pack to SQLite")
+                logger.exception("Could not save generated debate pack")
         return response
     except LLMConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -379,9 +398,7 @@ async def get_history(generation_id: str, request: Request) -> PackDetail:
 
 
 @app.delete("/api/history/{generation_id}")
-async def delete_history(
-    generation_id: str, request: Request
-) -> dict[str, bool]:
+async def delete_history(generation_id: str, request: Request) -> dict[str, bool]:
     repository, user = require_history(request)
     deleted = await repository.delete(user.user_id, generation_id)
     if not deleted:
@@ -431,9 +448,7 @@ async def update_history_with_agent_stream(
         raise HTTPException(status_code=404, detail="Debate pack not found or expired.")
 
     async def run(progress):
-        latest = await generator_service.update_pack(
-            pack, payload.message, progress
-        )
+        latest = await generator_service.update_pack(pack, payload.message, progress)
         updated = await repository.update_latest(
             user.user_id, generation_id, latest, payload.message
         )
@@ -451,9 +466,7 @@ async def update_history_with_agent_stream(
     "/api/history/{generation_id}/versions",
     response_model=PackVersion,
 )
-async def save_history_version(
-    generation_id: str, request: Request
-) -> PackVersion:
+async def save_history_version(generation_id: str, request: Request) -> PackVersion:
     repository, user = require_history(request)
     version = await repository.save_version(user.user_id, generation_id)
     if version is None:
@@ -469,9 +482,7 @@ async def restore_history_version(
     generation_id: str, version_id: str, request: Request
 ) -> PackDetail:
     repository, user = require_history(request)
-    pack = await repository.restore_version(
-        user.user_id, generation_id, version_id
-    )
+    pack = await repository.restore_version(user.user_id, generation_id, version_id)
     if pack is None:
         raise HTTPException(status_code=404, detail="Version not found.")
     return pack

@@ -25,8 +25,8 @@ argument chains, rebuttals, speeches, and practical exercises.
 - **Responsive Web UI** for desktop and mobile browsers
 - **Guest and registered profiles** with isolated debate packs and secure
   password hashing
-- **Local 360-day history** using SQLite, with search, update sorting, deletion,
-  automatic expiration, and cleanup
+- **360-day persistent history** using SQLite locally or BytePlus TOS in the
+  cloud, with search, update sorting, deletion, and automatic expiration
 - **Living debate packs** with an AI update prompt, three saved versions, and
   one-click version restore
 - **Live generation progress** with current stage, source activity, elapsed
@@ -37,8 +37,9 @@ argument chains, rebuttals, speeches, and practical exercises.
 | Service | How Debate Buddy Uses It |
 | --- | --- |
 | **BytePlus ModelArk** | Runs the language model workflow for motion analysis, evidence evaluation, argument construction, rebuttal planning, speech writing, and vocabulary generation. |
-| **BytePlus veFaaS** | Hosts the stateless FastAPI application with elastic compute, request-level concurrency, and a minimum of one and maximum of two cloud instances. |
+| **BytePlus veFaaS** | Hosts the FastAPI application with elastic compute, request-level concurrency, and a minimum of one and maximum of two cloud instances. |
 | **BytePlus API Gateway** | Provides the public HTTPS endpoint, forwards all Web UI and API routes to veFaaS, and supports long-running generation requests. |
+| **BytePlus TOS** | Persists private user profiles, sessions, debate packs, messages, and versions across elastic instances, with 360-day lifecycle expiration for pack and session objects. |
 | **BytePlus IAM / STS** | Authenticates deployment operations through a local BytePlus CLI profile. Account access keys are never included in the application package. |
 
 ## How It Works
@@ -98,7 +99,7 @@ citations.
 - FastAPI and Uvicorn
 - Pydantic
 - Jinja2
-- SQLite for optional local history
+- SQLite for local history and BytePlus TOS for cloud persistence
 - HTTPX and Beautiful Soup
 - Playwright for optional local browser research
 - Plain HTML, CSS, and JavaScript
@@ -151,16 +152,23 @@ uvicorn app.main:app --reload --port 8000
 | `LLM_THINKING_MODE` | No | ModelArk thinking mode; defaults to `enabled` |
 | `LLM_REASONING_EFFORT` | No | Reasoning effort; defaults to `low` |
 | `LLM_MAX_TOKENS` | No | Combined reasoning and answer token limit; defaults to `120000` |
-| `LLM_TIMEOUT_SECONDS` | No | Model request timeout; defaults to 1800 seconds |
-| `WEBPAGE_TIMEOUT_SECONDS` | No | Browser API request timeout; defaults to 1800 seconds |
+| `LLM_TIMEOUT_SECONDS` | No | Model request timeout; defaults to 900 seconds |
+| `WEBPAGE_TIMEOUT_SECONDS` | No | Browser API request timeout; defaults to 900 seconds |
 | `SEARCH_PROVIDER` | No | `auto`, `tavily`, `serper`, `brave`, `google`, `openalex`, or `duckduckgo` |
 | `TAVILY_API_KEY` | No | Tavily search key |
 | `SERPER_API_KEY` | No | Serper search key |
 | `BRAVE_SEARCH_API_KEY` | No | Brave Search key |
 | `GOOGLE_CHROME_PATH` | No | Custom Chrome or Chromium executable path |
-| `ENABLE_LOCAL_HISTORY` | No | Enables SQLite history; defaults to `true` locally |
+| `STORAGE_BACKEND` | No | `sqlite`, `tos`, or `disabled`; defaults to `sqlite` |
+| `ENABLE_LOCAL_HISTORY` | No | Legacy SQLite switch; defaults to `true` |
 | `DATABASE_PATH` | No | SQLite database path |
-| `DATA_RETENTION_DAYS` | No | Local history retention; defaults to 360 days |
+| `BYTEPLUS_AK` | With TOS | BytePlus access key; set only as a secret |
+| `BYTEPLUS_SK` | With TOS | BytePlus secret key; set only as a secret |
+| `TOS_REGION` | With TOS | TOS region, such as `ap-southeast-1` |
+| `TOS_BUCKET` | With TOS | Private TOS bucket name |
+| `TOS_ENDPOINT` | With TOS | Native TOS endpoint; the app derives its S3-compatible endpoint |
+| `TOS_PREFIX` | No | Object prefix; defaults to `debate-buddy/v1` |
+| `DATA_RETENTION_DAYS` | No | Debate pack retention; defaults to 360 days |
 | `RULES_CACHE_PATH` | No | Debate rules cache path |
 
 Never commit real credentials. Use `.env` locally and veFaaS environment
@@ -196,7 +204,7 @@ evaluation, ModelArk reasoning, speech writing, source usage, and the final
 result. Closing the stream, including by selecting **Stop generation** in the
 Web UI, cancels the active server task and its in-flight model request.
 
-### Local History
+### Profiles And History
 
 ```bash
 curl 'http://127.0.0.1:8000/api/history?limit=20&offset=0&sort=desc&q=homework'
@@ -209,10 +217,10 @@ curl -X DELETE http://127.0.0.1:8000/api/history/GENERATION_ID
 ```
 
 Local profiles, sessions, packs, messages, and versions are stored in SQLite.
-Each browser starts as an isolated Guest; registering preserves that Guest's
-packs. Packs not updated for 360 days are removed automatically. The public
-veFaaS deployment disables profiles and local history so requests remain
-stateless across elastic instances.
+The public veFaaS deployment stores them in a private BytePlus TOS bucket so
+history remains available across elastic instances. Each browser starts as an
+isolated Guest; registering preserves that Guest's packs. Packs not updated for
+360 days are removed by both application cleanup and TOS lifecycle rules.
 
 ## Debate Rules
 
