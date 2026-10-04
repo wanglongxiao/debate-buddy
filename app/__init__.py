@@ -1,0 +1,1 @@
+"""Debate Buddy application package."""

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A simple debate research coach for middle school students">
+    <title>Debate Buddy</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
+    <script src="{{ url_for('static', path='/app.js') }}" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Debate Buddy home">
+        <span class="brand-mark" aria-hidden="true">DB</span>
+        <span>
+          <strong>Debate Buddy</strong>
+          <small data-i18n="subtitle">A simple debate research coach for middle school students</small>
+        </span>
+      </a>
+      <div class="language-switch" role="group" aria-label="Interface language">
+        <button type="button" class="language-option active" data-ui-language="en">English</button>
+        <button type="button" class="language-option" data-ui-language="zh">中文</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="setup-panel" aria-labelledby="setup-title">
+        <div class="panel-heading">
+          <p class="eyebrow" data-i18n="newPrep">NEW PREP</p>
+          <h1 id="setup-title" data-i18n="prepareDebate">Prepare your debate</h1>
+          <p data-i18n="setupHint">Tell your coach what you are preparing for.</p>
+        </div>
+
+        <form id="debate-form">
+          <label class="field-label" for="motion" data-i18n="motion">Debate motion</label>
+          <textarea id="motion" name="motion" rows="4" required minlength="5" maxlength="500"
+            placeholder="This House would ban homework in middle schools."></textarea>
+
+          <fieldset>
+            <legend data-i18n="side">Side</legend>
+            <div class="choice-grid two">
+              <label class="choice-card">
+                <input type="radio" name="side" value="Proposition" checked>
+                <span>
+                  <strong data-i18n="proposition">Proposition</strong>
+                  <small data-i18n="supportMotion">Support the motion</small>
+                </span>
+              </label>
+              <label class="choice-card">
+                <input type="radio" name="side" value="Opposition">
+                <span>
+                  <strong data-i18n="opposition">Opposition</strong>
+                  <small data-i18n="opposeMotion">Oppose the motion</small>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="field-row">
+            <div>
+              <label class="field-label" for="speech-time" data-i18n="speechTime">Speech time</label>
+              <div class="number-field">
+                <button type="button" id="time-minus" aria-label="Decrease speech time"><i data-lucide="minus"></i></button>
+                <input id="speech-time" name="speech_time_minutes" type="number" min="1" max="10" value="4">
+                <span data-i18n="minutes">min</span>
+                <button type="button" id="time-plus" aria-label="Increase speech time"><i data-lucide="plus"></i></button>
+              </div>
+            </div>
+            <div>
+              <label class="field-label" for="research-depth" data-i18n="researchDepth">Research depth</label>
+              <select id="research-depth" name="research_depth">
+                <option>Quick Prep</option>
+                <option selected>Standard Prep</option>
+                <option>Deep Research</option>
+              </select>
+            </div>
+          </div>
+
+          <fieldset>
+            <legend data-i18n="myRoles">My speaker role</legend>
+            <p class="field-help" data-i18n="selectMany">Select one or more.</p>
+            <div class="role-grid">
+              <label class="role-choice">
+                <input type="checkbox" name="speaker_roles" value="1st Speaker" checked>
+                <span><b>1</b><em data-i18n="firstSpeaker">1st Speaker</em></span>
+              </label>
+              <label class="role-choice">
+                <input type="checkbox" name="speaker_roles" value="2nd Speaker">
+                <span><b>2</b><em data-i18n="secondSpeaker">2nd Speaker</em></span>
+              </label>
+              <label class="role-choice">
+                <input type="checkbox" name="speaker_roles" value="3rd Speaker">
+                <span><b>3</b><em data-i18n="thirdSpeaker">3rd Speaker</em></span>
+              </label>
+              <label class="role-choice">
+                <input type="checkbox" name="speaker_roles" value="4th Speaker / Reply Speaker / Summary Speaker">
+                <span><b>4</b><em data-i18n="replySpeaker">Reply / Summary</em></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <label class="field-label" for="output-language" data-i18n="outputLanguage">Output language</label>
+          <select id="output-language" name="language">
+            <option>English</option>
+            <option>中文</option>
+            <option>Bilingual</option>
+          </select>
+
+          <details class="source-details">
+            <summary><i data-lucide="link"></i><span data-i18n="addSources">Add your own sources</span></summary>
+            <label class="field-label" for="source-urls" data-i18n="sourceLinks">Source links</label>
+            <textarea id="source-urls" rows="3" placeholder="https://example.org/report&#10;https://example.edu/study"></textarea>
+            <p class="field-help" data-i18n="onePerLine">One public web link per line.</p>
+          </details>
+
+          <p id="form-error" class="form-error" role="alert" hidden></p>
+          <button class="generate-button" type="submit">
+            <i data-lucide="sparkles"></i>
+            <span data-i18n="generate">Generate my prep pack</span>
+          </button>
+        </form>
+      </aside>
+
+      <section class="results-panel" aria-live="polite">
+        <div id="empty-state" class="empty-state">
+          <div class="empty-visual" aria-hidden="true">
+            <span class="note note-one">CLAIM</span>
+            <span class="note note-two">WHY?</span>
+            <span class="note note-three">PROOF</span>
+            <i data-lucide="messages-square"></i>
+          </div>
+          <h2 data-i18n="readyTitle">Ready when you are</h2>
+          <p data-i18n="readyText">Your research, case, questions, speeches, and practice plan will appear here.</p>
+        </div>
+
+        <div id="loading-state" class="loading-state" hidden>
+          <div class="loader" aria-hidden="true"><span></span><span></span><span></span></div>
+          <h2 data-i18n="researching">Building your prep pack</h2>
+          <p id="loading-message" data-i18n="loadingOne">Reading the motion and finding both sides...</p>
+          <div class="progress-track"><span></span></div>
+        </div>
+
+        <div id="result-state" hidden>
+          <div class="result-toolbar">
+            <div>
+              <p class="eyebrow" data-i18n="prepPack">PREP PACK</p>
+              <h2 id="result-motion"></h2>
+              <p id="result-meta"></p>
+            </div>
+            <div class="toolbar-actions">
+              <button type="button" id="copy-all" class="secondary-button" title="Copy all">
+                <i data-lucide="copy"></i><span data-i18n="copyAll">Copy all</span>
+              </button>
+              <button type="button" id="download-markdown" class="secondary-button" title="Download Markdown">
+                <i data-lucide="download"></i><span>Markdown</span>
+              </button>
+              <button type="button" id="print-pdf" class="icon-button" title="Print or save as PDF" aria-label="Print or save as PDF">
+                <i data-lucide="printer"></i>
+              </button>
+            </div>
+          </div>
+          <div id="warning-list" class="warning-list" hidden></div>
+          <nav id="section-nav" class="section-nav" aria-label="Prep pack sections"></nav>
+          <div id="result-sections" class="result-sections"></div>
+        </div>
+      </section>
+    </main>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
