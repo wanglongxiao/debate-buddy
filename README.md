@@ -23,7 +23,14 @@ argument chains, rebuttals, speeches, and practical exercises.
 - **English, Chinese, and bilingual output**
 - **Markdown export, section copying, and print-to-PDF support**
 - **Responsive Web UI** for desktop and mobile browsers
-- **Local 30-day history** using SQLite, with automatic expiration and cleanup
+- **Guest and registered profiles** with isolated debate packs and secure
+  password hashing
+- **Local 360-day history** using SQLite, with search, update sorting, deletion,
+  automatic expiration, and cleanup
+- **Living debate packs** with an AI update prompt, three saved versions, and
+  one-click version restore
+- **Live generation progress** with current stage, source activity, elapsed
+  time, input locking, and true request cancellation
 
 ## BytePlus Services
 
@@ -40,9 +47,10 @@ argument chains, rebuttals, speeches, and practical exercises.
 2. Select Proposition or Opposition.
 3. Choose the speech duration and one or more speaker roles.
 4. Select Quick Prep, Standard Prep, or Deep Research.
-5. Optionally provide trusted public source URLs.
+5. Optionally provide notes, source excerpts, public URLs, or a mixture.
 6. Debate Buddy researches the topic, evaluates evidence, builds the case, and
-   generates team and individual preparation materials.
+   generates team and individual preparation materials while streaming the
+   current stage, source activity, and elapsed time to the browser.
 
 The result includes:
 
@@ -68,7 +76,7 @@ Debate Buddy supports:
 - Google Search through a local Chrome or Chromium browser
 - OpenAlex academic research without an API key
 - DuckDuckGo HTML fallback
-- User-provided public source URLs
+- User-provided text and public source URLs
 
 The automatic provider order is:
 
@@ -140,6 +148,11 @@ uvicorn app.main:app --reload --port 8000
 | `MODELARK_API_KEY` | Yes | BytePlus ModelArk API key |
 | `MAIN_AGENT_ENDPOINT` | Yes | ModelArk endpoint ID |
 | `MODELARK_BASE_URL` | No | ModelArk API base URL |
+| `LLM_THINKING_MODE` | No | ModelArk thinking mode; defaults to `enabled` |
+| `LLM_REASONING_EFFORT` | No | Reasoning effort; defaults to `low` |
+| `LLM_MAX_TOKENS` | No | Combined reasoning and answer token limit; defaults to `120000` |
+| `LLM_TIMEOUT_SECONDS` | No | Model request timeout; defaults to 1800 seconds |
+| `WEBPAGE_TIMEOUT_SECONDS` | No | Browser API request timeout; defaults to 1800 seconds |
 | `SEARCH_PROVIDER` | No | `auto`, `tavily`, `serper`, `brave`, `google`, `openalex`, or `duckduckgo` |
 | `TAVILY_API_KEY` | No | Tavily search key |
 | `SERPER_API_KEY` | No | Serper search key |
@@ -147,7 +160,7 @@ uvicorn app.main:app --reload --port 8000
 | `GOOGLE_CHROME_PATH` | No | Custom Chrome or Chromium executable path |
 | `ENABLE_LOCAL_HISTORY` | No | Enables SQLite history; defaults to `true` locally |
 | `DATABASE_PATH` | No | SQLite database path |
-| `DATA_RETENTION_DAYS` | No | Local history retention; defaults to 30 days |
+| `DATA_RETENTION_DAYS` | No | Local history retention; defaults to 360 days |
 | `RULES_CACHE_PATH` | No | Debate rules cache path |
 
 Never commit real credentials. Use `.env` locally and veFaaS environment
@@ -173,21 +186,33 @@ curl -X POST http://127.0.0.1:8000/api/generate \
     "speaker_roles": ["1st Speaker", "2nd Speaker"],
     "language": "English",
     "research_depth": "Standard Prep",
-    "source_urls": []
+    "source_material": "Notes, source excerpts, and https://example.org/report"
   }'
 ```
+
+For live progress, use `POST /api/generate/stream` with the same JSON body.
+The endpoint returns newline-delimited JSON events for research, evidence
+evaluation, ModelArk reasoning, speech writing, source usage, and the final
+result. Closing the stream, including by selecting **Stop generation** in the
+Web UI, cancels the active server task and its in-flight model request.
 
 ### Local History
 
 ```bash
-curl 'http://127.0.0.1:8000/api/history?limit=20&offset=0'
+curl 'http://127.0.0.1:8000/api/history?limit=20&offset=0&sort=desc&q=homework'
 curl http://127.0.0.1:8000/api/history/GENERATION_ID
+curl -N -X POST http://127.0.0.1:8000/api/history/GENERATION_ID/agent/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Add this new viewpoint and strengthen the rebuttal."}'
+curl -X POST http://127.0.0.1:8000/api/history/GENERATION_ID/versions
 curl -X DELETE http://127.0.0.1:8000/api/history/GENERATION_ID
 ```
 
-Local history is stored in SQLite and automatically removes records older than
-30 days. The public veFaaS deployment disables local history so that requests
-remain stateless across elastic instances.
+Local profiles, sessions, packs, messages, and versions are stored in SQLite.
+Each browser starts as an isolated Guest; registering preserves that Guest's
+packs. Packs not updated for 360 days are removed automatically. The public
+veFaaS deployment disables profiles and local history so requests remain
+stateless across elastic instances.
 
 ## Debate Rules
 

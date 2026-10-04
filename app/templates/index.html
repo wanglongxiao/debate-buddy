@@ -12,7 +12,7 @@
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
     <script src="{{ url_for('static', path='/app.js') }}" defer></script>
   </head>
-  <body>
+  <body data-webpage-timeout-seconds="{{ webpage_timeout_seconds }}">
     <header class="topbar">
       <a class="brand" href="/" aria-label="Debate Buddy home">
         <span class="brand-mark" aria-hidden="true">DB</span>
@@ -21,13 +21,21 @@
           <small data-i18n="subtitle">A simple debate research coach for middle school students</small>
         </span>
       </a>
-      <div class="language-switch" role="group" aria-label="Interface language">
-        <button type="button" class="language-option active" data-ui-language="en">English</button>
-        <button type="button" class="language-option" data-ui-language="zh">中文</button>
+      <div class="topbar-actions">
+        <button type="button" id="history-button" class="topbar-button">
+          <i data-lucide="history"></i><span data-i18n="history">History</span>
+        </button>
+        <button type="button" id="profile-button" class="topbar-button">
+          <i data-lucide="user-round"></i><span id="profile-label">Guest</span>
+        </button>
+        <div class="language-switch" role="group" aria-label="Interface language">
+          <button type="button" class="language-option active" data-ui-language="en">English</button>
+          <button type="button" class="language-option" data-ui-language="zh">中文</button>
+        </div>
       </div>
     </header>
 
-    <main class="workspace">
+    <main id="home-view" class="workspace">
       <aside class="setup-panel" aria-labelledby="setup-title">
         <div class="panel-heading">
           <p class="eyebrow" data-i18n="newPrep">NEW PREP</p>
@@ -112,15 +120,15 @@
 
           <details class="source-details">
             <summary><i data-lucide="link"></i><span data-i18n="addSources">Add your own sources</span></summary>
-            <label class="field-label" for="source-urls" data-i18n="sourceLinks">Source links</label>
-            <textarea id="source-urls" rows="3" placeholder="https://example.org/report&#10;https://example.edu/study"></textarea>
-            <p class="field-help" data-i18n="onePerLine">One public web link per line.</p>
+            <label class="field-label" for="source-material" data-i18n="sourceLinks">Text and links</label>
+            <textarea id="source-material" rows="5" maxlength="20000" placeholder="Paste notes, claims, source excerpts, public URLs, or a mix of them."></textarea>
+            <p class="field-help" data-i18n="onePerLine">Add plain text, public URLs, or both.</p>
           </details>
 
           <p id="form-error" class="form-error" role="alert" hidden></p>
-          <button class="generate-button" type="submit">
+          <button id="generate-button" class="generate-button" type="submit">
             <i data-lucide="sparkles"></i>
-            <span data-i18n="generate">Generate my prep pack</span>
+            <span id="generate-button-label" data-i18n="generate">Generate my prep pack</span>
           </button>
         </form>
       </aside>
@@ -138,10 +146,21 @@
         </div>
 
         <div id="loading-state" class="loading-state" hidden>
-          <div class="loader" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="spin-ring" aria-hidden="true"></div>
           <h2 data-i18n="researching">Building your prep pack</h2>
           <p id="loading-message" data-i18n="loadingOne">Reading the motion and finding both sides...</p>
-          <div class="progress-track"><span></span></div>
+          <p id="loading-elapsed" class="loading-elapsed"></p>
+          <div class="progress-track"><span id="generation-progress-bar"></span></div>
+          <div class="generation-progress-details">
+            <section>
+              <h3 data-i18n="progressSteps">Progress</h3>
+              <ol id="generation-event-list"></ol>
+            </section>
+            <section id="generation-resource-section" hidden>
+              <h3 data-i18n="resourcesUsed">Sources being used</h3>
+              <ul id="generation-resource-list"></ul>
+            </section>
+          </div>
         </div>
 
         <div id="result-state" hidden>
@@ -152,6 +171,12 @@
               <p id="result-meta"></p>
             </div>
             <div class="toolbar-actions">
+              <button type="button" id="save-version" class="secondary-button pack-action" hidden title="Save version">
+                <i data-lucide="save"></i><span data-i18n="saveVersion">Save</span>
+              </button>
+              <button type="button" id="show-versions" class="secondary-button pack-action" hidden title="Versions">
+                <i data-lucide="rotate-ccw"></i><span data-i18n="versions">Versions</span>
+              </button>
               <button type="button" id="copy-all" class="secondary-button" title="Copy all">
                 <i data-lucide="copy"></i><span data-i18n="copyAll">Copy all</span>
               </button>
@@ -169,6 +194,101 @@
         </div>
       </section>
     </main>
+
+    <main id="history-view" class="page-view" hidden>
+      <header class="page-heading">
+        <div>
+          <p class="eyebrow" data-i18n="yourLibrary">YOUR LIBRARY</p>
+          <h1 data-i18n="historyTitle">Debate research history</h1>
+          <p id="history-summary"></p>
+        </div>
+        <button type="button" id="new-prep-button" class="secondary-button">
+          <i data-lucide="plus"></i><span data-i18n="newPrepButton">New prep</span>
+        </button>
+      </header>
+      <div class="history-tools">
+        <label class="search-field">
+          <i data-lucide="search"></i>
+          <input id="history-search" type="search" maxlength="200" data-i18n-placeholder="searchHistory" placeholder="Search motions">
+        </label>
+        <select id="history-sort" aria-label="History sort order">
+          <option value="desc" data-i18n="newestFirst">Recently updated</option>
+          <option value="asc" data-i18n="oldestFirst">Oldest updated</option>
+        </select>
+      </div>
+      <div id="history-list" class="history-list"></div>
+      <div id="history-empty" class="history-empty" hidden>
+        <i data-lucide="folder-open"></i>
+        <h2 data-i18n="noHistory">No debate packs found</h2>
+      </div>
+    </main>
+
+    <aside id="agent-composer" class="agent-composer" hidden>
+      <div id="agent-progress" class="agent-progress" hidden>
+        <div class="compact-spinner" aria-hidden="true"></div>
+        <div>
+          <strong id="agent-progress-step"></strong>
+          <p id="agent-progress-detail"></p>
+        </div>
+        <div class="compact-progress-track"><span id="agent-progress-bar"></span></div>
+        <ul id="agent-resource-list" class="agent-resource-list"></ul>
+      </div>
+      <p id="agent-status"></p>
+      <form id="agent-form">
+        <textarea id="agent-message" maxlength="20000" required data-i18n-placeholder="agentPlaceholder" placeholder="Add a viewpoint or source, request a change, or ask a question..."></textarea>
+        <button id="agent-submit" type="submit" class="agent-send" title="Send" aria-label="Send">
+          <i data-lucide="arrow-up"></i>
+        </button>
+      </form>
+    </aside>
+
+    <dialog id="profile-dialog" class="modal">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow" data-i18n="profile">PROFILE</p>
+          <h2 id="profile-title">Guest</h2>
+        </div>
+        <button type="button" class="icon-button modal-close" aria-label="Close">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div id="guest-auth">
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab active" data-auth-view="register" data-i18n="register">Register</button>
+          <button type="button" class="auth-tab" data-auth-view="login" data-i18n="login">Log in</button>
+        </div>
+        <form id="register-form" class="auth-form">
+          <label><span data-i18n="nickname">Nickname</span><input name="nickname" required maxlength="50" autocomplete="nickname"></label>
+          <label><span data-i18n="username">Username</span><input name="username" required minlength="3" maxlength="40" pattern="[A-Za-z0-9_.-]+" autocomplete="username"></label>
+          <label><span data-i18n="password">Password</span><input name="password" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></label>
+          <button type="submit" class="generate-button" data-i18n="createAccount">Create account</button>
+        </form>
+        <form id="login-form" class="auth-form" hidden>
+          <label><span data-i18n="username">Username</span><input name="username" required autocomplete="username"></label>
+          <label><span data-i18n="password">Password</span><input name="password" type="password" required autocomplete="current-password"></label>
+          <button type="submit" class="generate-button" data-i18n="login">Log in</button>
+        </form>
+      </div>
+      <form id="profile-form" class="auth-form" hidden>
+        <label><span data-i18n="nickname">Nickname</span><input name="nickname" required maxlength="50"></label>
+        <button type="submit" class="generate-button" data-i18n="updateProfile">Update profile</button>
+        <button type="button" id="logout-button" class="danger-button" data-i18n="logout">Log out</button>
+      </form>
+      <p id="auth-error" class="form-error" role="alert" hidden></p>
+    </dialog>
+
+    <dialog id="versions-dialog" class="modal">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow" data-i18n="savedVersions">SAVED VERSIONS</p>
+          <h2 data-i18n="restoreVersion">Restore a version</h2>
+        </div>
+        <button type="button" class="icon-button modal-close" aria-label="Close">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div id="version-list" class="version-list"></div>
+    </dialog>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>
 </html>

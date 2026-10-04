@@ -37,6 +37,7 @@ class GenerateRequest(BaseModel):
     language: OutputLanguage = OutputLanguage.english
     research_depth: ResearchDepth = ResearchDepth.standard
     source_urls: List[HttpUrl] = Field(default_factory=list, max_length=10)
+    source_material: str = Field(default="", max_length=20000)
 
     @field_validator("motion")
     @classmethod
@@ -47,6 +48,11 @@ class GenerateRequest(BaseModel):
     @classmethod
     def unique_roles(cls, value: List[SpeakerRole]) -> List[SpeakerRole]:
         return list(dict.fromkeys(value))
+
+    @field_validator("source_material")
+    @classmethod
+    def clean_source_material(cls, value: str) -> str:
+        return value.strip()
 
 
 class SearchResult(BaseModel):
@@ -203,6 +209,48 @@ class GenerateResponse(BaseModel):
     research_warnings: List[str] = Field(default_factory=list)
 
 
+class UserProfile(BaseModel):
+    user_id: str
+    username: Optional[str] = None
+    nickname: str
+    is_guest: bool
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=40, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=8, max_length=128)
+    nickname: str = Field(min_length=1, max_length=50)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("nickname")
+    @classmethod
+    def clean_nickname(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=40)
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class ProfileUpdateRequest(BaseModel):
+    nickname: str = Field(min_length=1, max_length=50)
+
+    @field_validator("nickname")
+    @classmethod
+    def clean_nickname(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
 class HistoryItem(BaseModel):
     generation_id: str
     motion: str
@@ -211,6 +259,7 @@ class HistoryItem(BaseModel):
     language: str
     research_depth: str
     created_at: datetime
+    updated_at: datetime
     expires_at: datetime
 
 
@@ -218,6 +267,39 @@ class HistoryListResponse(BaseModel):
     items: List[HistoryItem] = Field(default_factory=list)
     total: int
     retention_days: int
+
+
+class PackVersion(BaseModel):
+    version_id: str
+    name: str
+    created_at: datetime
+
+
+class PackMessage(BaseModel):
+    message_id: str
+    role: str
+    content: str
+    created_at: datetime
+
+
+class PackDetail(BaseModel):
+    generation_id: str
+    request: GenerateRequest
+    latest: GenerateResponse
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime
+    versions: List[PackVersion] = Field(default_factory=list)
+    messages: List[PackMessage] = Field(default_factory=list)
+
+
+class AgentUpdateRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("message")
+    @classmethod
+    def clean_message(cls, value: str) -> str:
+        return value.strip()
 
 
 class RulesStatus(BaseModel):

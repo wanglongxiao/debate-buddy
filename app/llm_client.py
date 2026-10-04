@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 from typing import Any, Dict, Optional
 
 import httpx
@@ -71,16 +72,35 @@ class ModelArkClient:
                     {"role": "user", "content": full_prompt + retry_note},
                 ],
                 "temperature": temperature if attempt == 0 else 0,
-                "max_tokens": max_tokens,
+                "max_tokens": self.settings.llm_max_tokens,
                 "response_format": {"type": "json_object"},
+                "thinking": {"type": self.settings.llm_thinking_mode},
+                "reasoning_effort": self.settings.llm_reasoning_effort,
             }
             try:
+                started_at = time.perf_counter()
                 async with httpx.AsyncClient(
                     timeout=self.settings.llm_timeout_seconds
                 ) as client:
                     response = await client.post(url, headers=headers, json=payload)
                     response.raise_for_status()
                     body = response.json()
+                choice = body.get("choices", [{}])[0]
+                usage = body.get("usage", {})
+                logger.info(
+                    "ModelArk structured call model=%s elapsed=%.2fs "
+                    "prompt_tokens=%s completion_tokens=%s reasoning_tokens=%s "
+                    "finish_reason=%s attempt=%s",
+                    response_model.__name__,
+                    time.perf_counter() - started_at,
+                    usage.get("prompt_tokens"),
+                    usage.get("completion_tokens"),
+                    usage.get("completion_tokens_details", {}).get(
+                        "reasoning_tokens"
+                    ),
+                    choice.get("finish_reason"),
+                    attempt + 1,
+                )
             except httpx.HTTPStatusError as exc:
                 detail = exc.response.text[:500]
                 logger.error("ModelArk returned HTTP %s", exc.response.status_code)
@@ -91,7 +111,22 @@ class ModelArkClient:
                 raise LLMResponseError(f"ModelArk request failed: {exc}") from exc
 
             try:
-                content = body["choices"][0]["message"]["content"]
+                choice = body["choices"][0]
+                if choice.get("finish_reason") == "length":
+                    usage = body.get("usage", {})
+                    reasoning_tokens = usage.get(
+                        "completion_tokens_details", {}
+                    ).get("reasoning_tokens")
+                    raise LLMResponseError(
+                        "ModelArk truncated the structured response at "
+                        f"{self.settings.llm_max_tokens} tokens"
+                        + (
+                            f" ({reasoning_tokens} reasoning tokens)."
+                            if reasoning_tokens is not None
+                            else "."
+                        )
+                    )
+                content = choice["message"]["content"]
                 data = self._parse_json(content)
                 return response_model.model_validate(data)
             except (
@@ -110,7 +145,7 @@ class ModelArkClient:
                 )
 
         raise LLMResponseError(
-            "The AI returned an invalid structured response after two retries."
+            f"The AI returned an invalid structured response after {max_attempts} attempts."
         ) from last_error
 
     @staticmethod

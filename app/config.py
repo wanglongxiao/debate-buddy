@@ -24,7 +24,11 @@ class Settings(BaseSettings):
     modelark_api_key: Optional[str] = Field(default=None)
     modelark_base_url: str = "https://ark.ap-southeast.bytepluses.com/api/v3"
     main_agent_endpoint: Optional[str] = Field(default=None)
-    llm_timeout_seconds: float = 120.0
+    llm_timeout_seconds: float = 1800.0
+    llm_thinking_mode: Literal["enabled", "disabled"] = "enabled"
+    llm_reasoning_effort: Literal["low", "medium", "high"] = "low"
+    llm_max_tokens: int = Field(default=120000, ge=1, le=131072)
+    webpage_timeout_seconds: int = Field(default=1800, ge=1)
 
     search_provider: Literal[
         "auto", "tavily", "serper", "brave", "google", "openalex", "duckduckgo"
@@ -40,7 +44,7 @@ class Settings(BaseSettings):
     rules_cache_path: Path = APP_DIR / "data" / "cache" / "debate_rules.json"
     enable_local_history: bool = True
     database_path: Path = APP_DIR / "data" / "debate_buddy.db"
-    data_retention_days: int = Field(default=30, ge=1)
+    data_retention_days: int = Field(default=360, ge=1)
     database_cleanup_interval_hours: int = Field(default=24, ge=1)
 
     @property

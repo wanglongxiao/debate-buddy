@@ -117,13 +117,31 @@ class WebResearchSkill:
                 else:
                     results.extend(batch)
 
-        for source_url in request.source_urls:
+        manual_urls = [str(item) for item in request.source_urls]
+        manual_urls.extend(
+            re.findall(r"https?://[^\s<>()\"']+", request.source_material)
+        )
+        for source_url in list(dict.fromkeys(manual_urls))[:10]:
             try:
-                results.append(await self._fetch_manual_url(str(source_url)))
+                results.append(await self._fetch_manual_url(source_url.rstrip(".,;")))
             except Exception as exc:
                 warnings.append(
-                    f"Could not read {urlparse(str(source_url)).netloc}: {type(exc).__name__}"
+                    f"Could not read {urlparse(source_url).netloc}: {type(exc).__name__}"
                 )
+
+        manual_text = re.sub(
+            r"https?://[^\s<>()\"']+", "", request.source_material
+        ).strip()
+        if manual_text:
+            results.append(
+                SearchResult(
+                    title="User-provided source material",
+                    url="about:blank#user-source-material",
+                    snippet=manual_text[:6000],
+                    source_type="User-provided material",
+                    credibility="Needs verification",
+                )
+            )
 
         deduped: dict[str, SearchResult] = {}
         for result in results:
@@ -159,6 +177,34 @@ class WebResearchSkill:
                 "No web evidence was found. Evidence claims must be treated as unverified."
             )
         return limited_results, warnings
+
+    async def fetch_user_urls(
+        self, source_material: str
+    ) -> tuple[list[SearchResult], list[str]]:
+        urls = list(
+            dict.fromkeys(
+                url.rstrip(".,;")
+                for url in re.findall(
+                    r"https?://[^\s<>()\"']+", source_material
+                )
+            )
+        )[:10]
+        if not urls:
+            return [], []
+        batches = await asyncio.gather(
+            *[self._fetch_manual_url(url) for url in urls],
+            return_exceptions=True,
+        )
+        results: list[SearchResult] = []
+        warnings: list[str] = []
+        for url, item in zip(urls, batches):
+            if isinstance(item, Exception):
+                warnings.append(
+                    f"Could not read {urlparse(url).netloc}: {type(item).__name__}"
+                )
+            else:
+                results.append(item)
+        return results, warnings
 
     def _select_provider(self) -> str:
         requested = self.settings.search_provider
