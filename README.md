@@ -233,10 +233,15 @@ Tournament-specific rules should always take priority.
 
 ## Security and Privacy
 
-- `.env`, credentials, caches, databases, test files, and local environments
-  are excluded from Git and cloud deployment packages.
-- BytePlus account AK/SK credentials are used only by the local CLI profile.
+- The repository excludes `.env`, `uv.lock`, `.venv/`, `__pycache__/`,
+  `.pytest_cache/`, `.ruff_cache/`, `.coverage`, `.vefaas/`,
+  `run_vefaas.sh`, `build/`, `dist/`, `docs/`, `tests/`, and `scripts/`.
+- BytePlus account AK/SK credentials are stored only in ignored local
+  configuration or veFaaS environment variables. They are never included in
+  Git commits or deployment archives.
 - ModelArk credentials are injected through environment variables.
+- The TOS bucket is private because it stores account data, session records,
+  password hashes, and user-generated debate content.
 - The application does not log full API keys.
 - Debate prompts and selected source excerpts are sent to the configured
   ModelArk endpoint.
