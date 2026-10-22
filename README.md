@@ -1,6 +1,6 @@
 # Debate Buddy
 
-**Live Demo:** [https://s6f6mbgn5klufecacfd5j.apigateway-ap-southeast-1.apigw-byteplus.com/](https://s6f6mbgn5klufecacfd5j.apigateway-ap-southeast-1.apigw-byteplus.com/)
+**Live Demo:** [https://s7kuama4td669fv0835d5.apigateway-ap-southeast-1.apigw-byteplus.com/](https://s7kuama4td669fv0835d5.apigateway-ap-southeast-1.apigw-byteplus.com/)
 
 Debate Buddy is an AI-powered debate research and practice assistant for
 students and teams. It turns a motion, side, speaking time, and selected speaker
@@ -181,6 +181,10 @@ variables in production.
 ```bash
 curl http://127.0.0.1:8000/api/health
 ```
+
+The health response reports `storage_ready` and a sanitized `storage_error`.
+If TOS is temporarily unavailable, the Web UI and health endpoint continue to
+run in degraded mode while profile and history endpoints return HTTP 503.
 
 ### Generate a Debate Pack
 

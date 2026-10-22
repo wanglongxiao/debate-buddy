@@ -67,6 +67,14 @@ def build_generation_repository():
 
 
 generation_repository = build_generation_repository()
+storage_ready = False
+storage_error: Optional[str] = None
+
+
+def mark_storage_unavailable(exc: Exception) -> None:
+    global storage_ready, storage_error
+    storage_ready = False
+    storage_error = type(exc).__name__
 
 
 async def periodic_storage_cleanup() -> None:
@@ -74,26 +82,50 @@ async def periodic_storage_cleanup() -> None:
         return
     interval_seconds = settings.database_cleanup_interval_hours * 60 * 60
     while True:
-        await asyncio.sleep(interval_seconds)
+        await asyncio.sleep(interval_seconds if storage_ready else 60)
         try:
+            if not storage_ready:
+                await initialize_storage()
+                continue
             deleted = await generation_repository.cleanup()
             if deleted:
                 logger.info("Deleted %s expired debate packs", deleted)
-        except Exception:
+        except Exception as exc:
+            mark_storage_unavailable(exc)
             logger.exception("Scheduled storage cleanup failed")
+
+
+async def initialize_storage() -> bool:
+    global storage_ready, storage_error
+    if generation_repository is None:
+        storage_ready = False
+        storage_error = None
+        return False
+    try:
+        await generation_repository.initialize()
+        deleted = await generation_repository.cleanup()
+    except Exception as exc:
+        mark_storage_unavailable(exc)
+        logger.exception(
+            "%s storage initialization failed; continuing in degraded mode",
+            settings.storage_backend.upper(),
+        )
+        return False
+    storage_ready = True
+    storage_error = None
+    logger.info(
+        "%s storage ready; deleted %s expired packs",
+        settings.storage_backend.upper(),
+        deleted,
+    )
+    return True
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     cleanup_task = None
     if generation_repository is not None:
-        await generation_repository.initialize()
-        deleted = await generation_repository.cleanup()
-        logger.info(
-            "%s storage ready; deleted %s expired packs",
-            settings.storage_backend.upper(),
-            deleted,
-        )
+        await initialize_storage()
         cleanup_task = asyncio.create_task(periodic_storage_cleanup())
     else:
         logger.info("Profile and history storage is disabled")
@@ -122,15 +154,21 @@ templates = Jinja2Templates(directory=APP_DIR / "templates")
 
 @app.middleware("http")
 async def user_session(request: Request, call_next):
-    if generation_repository is not None and not request.url.path.startswith(
-        "/static/"
+    if (
+        generation_repository is not None
+        and storage_ready
+        and not request.url.path.startswith("/static/")
     ):
-        token = request.cookies.get(SESSION_COOKIE, "")
-        profile = await generation_repository.resolve_session(token)
-        if profile is None:
-            profile, token = await generation_repository.create_guest_session()
-        request.state.user = profile
-        request.state.session_token = token
+        try:
+            token = request.cookies.get(SESSION_COOKIE, "")
+            profile = await generation_repository.resolve_session(token)
+            if profile is None:
+                profile, token = await generation_repository.create_guest_session()
+            request.state.user = profile
+            request.state.session_token = token
+        except Exception as exc:
+            mark_storage_unavailable(exc)
+            logger.exception("Storage session handling failed; entering degraded mode")
     response = await call_next(request)
     token = getattr(request.state, "session_token", None)
     if token and token != request.cookies.get(SESSION_COOKIE):
@@ -146,12 +184,22 @@ async def user_session(request: Request, call_next):
 
 
 def require_history(request: Request):
-    if generation_repository is None:
+    if generation_repository is None or not storage_ready:
         raise HTTPException(
             status_code=503,
-            detail="Profiles and history are disabled in this deployment.",
+            detail=(
+                "Profiles and history are disabled in this deployment."
+                if generation_repository is None
+                else "Profiles and history are temporarily unavailable."
+            ),
         )
-    return generation_repository, request.state.user
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Profiles and history are temporarily unavailable.",
+        )
+    return generation_repository, user
 
 
 def progress_stream(
@@ -238,17 +286,25 @@ async def index(request: Request) -> HTMLResponse:
 
 @app.get("/api/health")
 async def health() -> dict[str, object]:
-    stored_generations = (
-        await generation_repository.count()
-        if generation_repository is not None
-        else None
-    )
+    stored_generations = None
+    if generation_repository is not None and storage_ready:
+        try:
+            stored_generations = await generation_repository.count()
+        except Exception as exc:
+            mark_storage_unavailable(exc)
+            logger.exception("Storage health check failed")
     return {
-        "status": "ok",
+        "status": (
+            "degraded"
+            if generation_repository is not None and not storage_ready
+            else "ok"
+        ),
         "app": settings.app_name,
         "llm_configured": settings.llm_ready,
         "rules_loaded": rules_skill.status.loaded,
         "history_enabled": generation_repository is not None,
+        "storage_ready": storage_ready,
+        "storage_error": storage_error,
         "storage_backend": (
             settings.storage_backend
             if generation_repository is not None
@@ -257,6 +313,7 @@ async def health() -> dict[str, object]:
         "database_ready": (
             settings.database_path.exists()
             if generation_repository is not None
+            and storage_ready
             and settings.storage_backend == "sqlite"
             else False
         ),
@@ -340,11 +397,12 @@ async def update_profile(
 async def generate(payload: GenerateRequest, request: Request) -> GenerateResponse:
     try:
         response = await generator_service.generate(payload)
-        if generation_repository is not None:
+        if generation_repository is not None and storage_ready:
             try:
                 user = request.state.user
                 await generation_repository.save(user.user_id, payload, response)
-            except Exception:
+            except Exception as exc:
+                mark_storage_unavailable(exc)
                 logger.exception("Could not save generated debate pack")
         return response
     except LLMConfigurationError as exc:
@@ -367,8 +425,12 @@ async def generate_stream(
 
     async def run(progress):
         response = await generator_service.generate(payload, progress)
-        if generation_repository is not None and user is not None:
-            await generation_repository.save(user.user_id, payload, response)
+        if generation_repository is not None and storage_ready and user is not None:
+            try:
+                await generation_repository.save(user.user_id, payload, response)
+            except Exception as exc:
+                mark_storage_unavailable(exc)
+                logger.exception("Could not save generated debate pack")
         return response
 
     return progress_stream(run)
