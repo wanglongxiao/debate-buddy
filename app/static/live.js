@@ -194,11 +194,12 @@ function showAdvice(advice, label, version, target = "live-advice") {
   if (target === "live-advice" && version !== live.adviceVersion) return;
   const panel = el(target); panel.replaceChildren(); panel.hidden = false;
   const same = advice.mode === "continue";
+  const question = target === "live-answer";
   if (target === "live-advice") el("advice-title").textContent = same ? "我方续讲" : advice.mode === "rebut" ? "对方反驳" : "回应建议";
-  if (advice.key_points?.length) panel.append(node("h3", same ? "接下来展开的重点" : "对方的关键观点 / 证据"), bullets(advice.key_points));
-  if (advice.flaws?.length) panel.append(node("h3", "可能的漏洞 / 证据疑点"), bullets(advice.flaws));
-  panel.append(node("h3", same ? "可以接着说" : "可以这样回应"), node("div", advice.ready_to_say, "live-ready-line"));
-  if (advice.next_steps.length) panel.append(node("h3", same ? "后续发言顺序" : "反驳重点"), bullets(advice.next_steps));
+  if (advice.key_points?.length) panel.append(node("h3", question ? "回答要点" : same ? "接下来展开的重点" : advice.mode === "rebut" ? "对方的关键观点 / 证据" : "准备重点"), bullets(advice.key_points));
+  if (advice.flaws?.length) panel.append(node("h3", question ? "需留意的问题" : "可能的漏洞 / 证据疑点"), bullets(advice.flaws));
+  panel.append(node("h3", question ? "教练回答" : same ? "可以接着说" : "可以这样回应"), node("div", advice.ready_to_say, "live-ready-line"));
+  if (advice.next_steps.length) panel.append(node("h3", question ? "可采取的行动" : same ? "后续发言顺序" : "反驳重点"), bullets(advice.next_steps));
   if (advice.questions.length) panel.append(node("h3", "可以追问"), bullets(advice.questions));
   const cited = advice.cited_record_ids.map(id => live.records.find(r => r.event_id === id)).filter(Boolean);
   if (cited.length) {
