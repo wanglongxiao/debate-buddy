@@ -8,24 +8,35 @@
   <link rel="stylesheet" href="/static/live.css">
   <script src="/static/live.js" defer></script>
 </head>
-<body>
+<body class="live-page">
   <header class="topbar">
     <a class="brand" href="/"><span class="brand-mark">DB</span><span><strong>Debate Buddy</strong><small>Debate 实时分析</small></span></a>
-    <a class="secondary-button live-link" href="/">返回准备包</a>
+    <div class="live-top-actions">
+      <span id="live-status" class="live-badge" role="status">正在检查服务…</span>
+      <details class="live-help">
+        <summary>使用提示</summary>
+        <div class="live-help-content">
+          <ol class="live-tips">
+            <li>选择辩题，设置我方立场和发言轮次。</li>
+            <li>选当前发言方，开始监听；换人前先暂停再切换。ASR 每约 10 秒处理一段，暂停时也会处理末段。</li>
+            <li>记录自动跟随最新；向上滚动可回看，点击“跟随最新”恢复。建议和问答在右侧切换，窄屏通过标签切换。</li>
+          </ol>
+          <p id="asr-help" class="field-help"></p>
+          <p class="field-help" id="live-storage-note">只长期保存比赛摘要，不保存原始音频或完整转写。语音识别服务会处理音频。</p>
+          <p class="field-help">离开前先暂停并等待保存；访客请注册账号，以便以后找回比赛。证据需自行核实。</p>
+        </div>
+      </details>
+      <a class="secondary-button live-link" href="/">准备包</a>
+    </div>
   </header>
   <main class="live-workspace">
-    <header class="live-heading">
-      <div><p class="eyebrow">LIVE DEBATE</p><h1>听清观点，及时回应</h1><p>选好你的立场和发言轮次，让教练跟随比赛。</p></div>
-      <span id="live-status" class="live-badge" role="status">正在检查服务…</span>
-    </header>
-    <ol class="live-tips">
-      <li><b>1</b><span>选辩题，设置你的立场和轮次。</span></li>
-      <li><b>2</b><span>选择当前发言方，点击开始监听。换人时先暂停，再切换。</span></li>
-      <li><b>3</b><span>左侧看摘要，右侧看回应；下方随时提问或补录。</span></li>
-    </ol>
-
-    <section class="live-card" aria-labelledby="setup-title">
-      <div class="live-card-title"><h2 id="setup-title">比赛设置</h2><button class="secondary-button" id="new-match" hidden>新比赛</button></div>
+    <h1 class="live-sr-only">Debate 实时分析</h1>
+    <section class="live-card live-setup-card" aria-labelledby="setup-title">
+      <div class="live-card-title live-setup-title">
+        <h2 id="setup-title">比赛设置</h2>
+        <div id="live-match-summary" hidden><strong id="live-match-motion"></strong><p id="live-match-role"></p></div>
+        <div class="live-match-actions"><button id="export-match" class="secondary-button live-active-only">导出</button><button class="secondary-button" id="new-match" hidden>新比赛</button></div>
+      </div>
       <form id="live-setup">
         <div class="live-setup-grid">
           <label>辩题来源<select id="live-topic-source"><option value="new">新辩题 · 没有资料也能开始</option></select></label>
@@ -36,8 +47,6 @@
           <button type="submit" class="generate-button" id="create-match" disabled>进入比赛</button>
         </div>
       </form>
-      <div id="live-match-summary" hidden><strong id="live-match-motion"></strong><p id="live-match-role"></p></div>
-      <p class="field-help" id="live-storage-note">只长期保存比赛摘要，不保存原始音频或完整转写。语音识别服务会处理音频。</p>
       <div class="live-resume"><label for="live-saved-matches">已保存的比赛</label><select id="live-saved-matches"><option value="">选择比赛继续分析…</option></select><button class="secondary-button" id="resume-match">继续</button><button class="secondary-button" id="more-matches">更多</button></div>
     </section>
 
@@ -45,38 +54,50 @@
     <section id="live-arena" hidden>
       <section class="live-card live-controls" aria-label="监听控制">
         <div class="live-speaker-controls">
-          <label>当前发言方<select id="live-speaker"><option value="Proposition">正方</option><option value="Opposition">反方</option></select></label>
-          <label>当前发言轮次<select id="live-round"><option value="1">Round 1 · 一辩</option><option value="2">Round 2 · 二辩</option><option value="3">Round 3 · 三辩</option><option value="4">Round 4 · 四辩</option><option value="crossfire">交叉质询 / 自由辩</option><option value="reply">总结 / Reply</option></select></label>
-          <label>语音语言<select id="live-speech-language"><option value="zh">普通话</option><option value="en">English</option></select></label>
-          <label>识别方式<select id="live-asr"><option value="browser">浏览器语音识别</option><option value="server" disabled>服务器 ASR 模型 · 未配置</option><option value="manual">仅文字输入</option></select></label>
+          <label>发言方<select id="live-speaker"><option value="Proposition">正方</option><option value="Opposition">反方</option></select></label>
+          <label>轮次<select id="live-round"><option value="1">Round 1 · 一辩</option><option value="2">Round 2 · 二辩</option><option value="3">Round 3 · 三辩</option><option value="4">Round 4 · 四辩</option><option value="crossfire">交叉质询 / 自由辩</option><option value="reply">总结 / Reply</option></select></label>
         </div>
-        <div class="live-control-buttons"><button id="listen-button" class="generate-button">开始监听</button><button id="pause-button" class="danger-button" disabled>暂停并保存摘要</button><button id="export-match" class="secondary-button">导出摘要</button></div>
-        <p id="asr-help" class="field-help">麦克风需要 HTTPS 或 localhost。建议使用 Chrome；双方轮流发言时手动切换发言方，不自动辨认说话人。</p>
+        <div class="live-audio-options" id="live-audio-options">
+          <label>语音语言<select id="live-speech-language"><option value="zh">普通话</option><option value="en">English</option></select></label>
+          <label>ASR · 10 秒/段<select id="live-asr"><option value="browser">浏览器语音识别</option><option value="server" disabled>服务器 ASR 模型 · 未配置</option><option value="manual">仅文字输入</option></select></label>
+        </div>
+        <button id="audio-options-toggle" class="secondary-button" aria-label="语音语言与 ASR 设置" aria-controls="live-audio-options" aria-expanded="false">设置</button>
+        <div class="live-control-buttons"><button id="listen-button" class="generate-button">开始监听</button><button id="pause-button" class="danger-button" disabled>暂停保存</button></div>
       </section>
 
-      <div class="live-columns">
-        <section class="live-card live-records-panel" aria-labelledby="records-title">
-          <div class="live-card-title"><h2 id="records-title">比赛记录</h2><span id="record-count" class="live-badge">0 条摘要</span></div>
+      <nav class="live-pane-tabs" role="tablist" aria-label="分析内容">
+        <button role="tab" aria-selected="true" aria-controls="records-panel" data-pane="records">比赛记录</button>
+        <button role="tab" aria-selected="false" aria-controls="advice-panel" data-pane="advice">回应建议</button>
+        <button role="tab" aria-selected="false" aria-controls="advice-panel" data-pane="question">问答</button>
+      </nav>
+      <div class="live-columns" data-view="records">
+        <section id="records-panel" class="live-card live-records-panel" aria-labelledby="records-title">
+          <div class="live-card-title"><h2 id="records-title">比赛记录</h2><div class="live-record-actions"><span id="record-count" class="live-badge">0 条摘要</span><button id="follow-records" class="live-follow" aria-pressed="true">跟随最新</button></div></div>
           <div class="live-transcript"><div class="live-card-title"><strong>即时转写 · 临时</strong><span id="listen-status">麦克风已关闭</span></div><p id="live-transcript">开始监听，或在下方补录发言。</p></div>
           <div class="live-queue"><span id="queue-status" role="status">等待发言</span><button id="retry-turn" class="secondary-button" hidden>重试未保存的发言</button></div>
-          <div id="live-records" class="live-record-list"><p class="live-empty">摘要将按发言方、轮次排列，保留观点、证据及识别疑点。</p></div>
+          <div id="live-records" class="live-record-list" tabindex="0" aria-label="比赛摘要，可滚动回看"><p class="live-empty">摘要将按发言方、轮次排列，保留观点、证据及识别疑点。</p></div>
         </section>
-        <section class="live-card live-advice-panel" aria-labelledby="advice-title">
-          <div class="live-card-title"><h2 id="advice-title">回应建议</h2><button id="copy-advice" class="secondary-button" disabled>复制</button></div>
-          <p id="advice-status" class="field-help" role="status">教练会结合你的立场、辩位、已有资料和比赛记录提出建议。</p>
-          <div id="live-advice"><p class="live-empty">先听一段发言，或在下方问：“对方最关键的漏洞是什么？”</p></div>
+        <section id="advice-panel" class="live-card live-advice-panel" aria-label="回应建议与问答">
+          <div class="live-card-title"><div class="live-response-tabs" role="tablist" aria-label="建议与问答"><button id="advice-title" role="tab" aria-selected="true" aria-controls="live-advice-body" data-response="advice">回应建议</button><button role="tab" aria-selected="false" aria-controls="live-question-panel" data-response="question">问答回答</button></div><button id="copy-advice" class="secondary-button" disabled>复制</button></div>
+          <div id="live-advice-body" class="live-response-body">
+            <p id="advice-status" class="field-help live-single-line" role="status">等待发言，教练会结合你的立场提供建议。</p>
+            <div id="live-advice" tabindex="0" aria-label="回应建议，可滚动阅读"><p class="live-empty">先听一段发言，或在下方问：“对方最关键的漏洞是什么？”</p></div>
+          </div>
+          <div id="live-question-panel" class="live-response-body" hidden>
+            <p id="question-status" class="field-help live-single-line" role="status">在下方提问，回答会显示在这里。</p>
+            <div id="live-answer" tabindex="0" aria-label="问答回答，可滚动阅读" hidden></div>
+          </div>
           <p class="live-advice-note">发言中的证据会标记为待核实。教练不会在后台自动检索或验证来源。</p>
         </section>
       </div>
 
       <section class="live-card live-bottom" aria-labelledby="query-title">
-        <h2 id="query-title">随时提问与补录</h2>
-        <div class="live-quick-questions"><button type="button" data-question="对方目前最关键的漏洞是什么？">找对方漏洞</button><button type="button" data-question="请给出适合我发言轮次的30秒回应。">30 秒回应</button><button type="button" data-question="哪些证据仍需核实？我应该怎么追问？">检查证据</button></div>
-        <form id="live-query-form"><label for="live-query">问教练<textarea id="live-query" rows="2" maxlength="2000" required placeholder="例如：对方刚说的观点，怎样反驳更有力？"></textarea></label><button type="submit" id="ask-button" class="generate-button">发送问题</button><button type="button" id="cancel-question" class="danger-button" hidden>停止回答</button></form>
-        <p id="question-status" class="field-help" role="status"></p>
-        <div id="live-answer" hidden></div>
-        <details class="live-manual"><summary>听漏了？补录或粘贴发言</summary><form id="live-manual-form"><label for="manual-turn">按上方“当前发言方 / 轮次”记录<textarea id="manual-turn" rows="3" maxlength="6000" required placeholder="输入刚才的关键发言，也可补充漏听的内容。"></textarea></label><button type="submit" id="manual-submit" class="secondary-button">记录并分析</button></form></details>
-        <p class="field-help">离开页面前请先暂停，等待待处理发言保存。未保存文字仅存在当前页面；可随时导出摘要。访客请注册账号，以便以后找回比赛。</p>
+        <h2 id="query-title" class="live-sr-only">随时提问与补录</h2>
+        <div class="live-dock-actions">
+          <div class="live-quick-questions"><button type="button" data-question="对方目前最关键的漏洞是什么？">找漏洞</button><button type="button" data-question="请给出适合我发言轮次的30秒回应。">30 秒回应</button><button type="button" data-question="哪些证据仍需核实？我应该怎么追问？">检查证据</button></div>
+          <details class="live-manual"><summary>补录发言</summary><form id="live-manual-form"><div class="live-card-title"><strong>补录发言</strong><button type="button" id="close-manual" class="secondary-button">关闭</button></div><label for="manual-turn">按上方发言方 / 轮次记录<textarea id="manual-turn" rows="3" maxlength="6000" required placeholder="输入关键发言，也可补充漏听内容。"></textarea></label><button type="submit" id="manual-submit" class="secondary-button">记录并分析</button></form></details>
+        </div>
+        <form id="live-query-form"><label for="live-query"><span class="live-sr-only">问教练</span><textarea id="live-query" rows="1" maxlength="2000" required placeholder="问教练：怎样回应对方刚才的观点？"></textarea></label><button type="submit" id="ask-button" class="generate-button">发送</button><button type="button" id="cancel-question" class="danger-button" hidden>停止</button></form>
       </section>
     </section>
   </main>

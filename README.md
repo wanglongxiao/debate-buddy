@@ -46,7 +46,13 @@ turn. Overlapping speakers need manual correction.
 
 The page has three areas: setup and listening controls at the top, saved
 summaries and response advice in the middle, and questions/manual notes at the
-bottom. Summaries are saved before advice is generated. An interrupted turn can
+bottom. During a match the page fits the viewport; records, advice and question
+answers scroll inside their own panes. Records follow the newest turn
+automatically. Scroll up to read history and use **Follow latest** to resume.
+Advice and question answers use separate tabs so new automatic advice does not
+replace a question answer. Narrow screens switch panes with tabs; language/ASR
+settings, help and manual entry expand as overlays.
+Summaries are saved before advice is generated. An interrupted turn can
 be retried with the same event ID without creating duplicate records. Microphone
 permission requires HTTPS or localhost.
 
@@ -62,11 +68,13 @@ There are three recognition modes:
   Alternatively set `ASR_PROVIDER=openai`, `ASR_URL` (full HTTPS
   `/audio/transcriptions` endpoint), `ASR_API_KEY` and `ASR_MODEL` for a compatible
   provider returning `{"text":"..."}`. `auto` prefers Seed when a speech key exists.
-  The browser sends independent mono 16 kHz WAV chunks roughly every five
+  The browser sends independent mono 16 kHz WAV chunks roughly every ten
   seconds over HTTP; the Seed adapter streams each chunk upstream over WebSocket,
   without writing audio to disk. This provides results per chunk, rather than
   word-by-word interim transcription. Allow the capture interval plus ASR,
-  summary and advice processing time. The queue pauses capture when it falls behind.
+  summary and advice processing time. Pausing also sends the remaining partial
+  chunk. Browser recognition flushes finalized text every ten seconds (or sooner
+  for long text). The queue pauses capture when it falls behind.
 - **Browser recognition**: available in supported browsers such as Chrome,
   independently of the configured text model. This uses the browser's speech
   service; it is not the site's configured ASR large model. Network access to

@@ -1,5 +1,6 @@
 "use strict";
 const el = (id) => document.getElementById(id);
+const AUDIO_CHUNK_SECONDS = 10;
 const live = {
   session: null, records: [], packs: [], pending: [], processing: false,
   failed: false, listening: false, stopping: false, starting: false,
@@ -7,6 +8,7 @@ const live = {
   flushTimer: null, restartTimer: null, audio: null, frames: [], sampleCount: 0,
   speaker: null, advice: "", adviceVersion: 0, questionController: null,
   matchesOffset: 0, ready: false,
+  followRecords: true, pane: "records", responseTab: "advice",
 };
 const sideName = (side) => side === "Proposition" ? "正方" : "反方";
 const roundName = (round) => ({crossfire: "交叉质询", reply: "总结 / Reply"}[round] || `Round ${round}`);
@@ -23,6 +25,7 @@ function error(message) {
 }
 function controls() {
   const capturing = live.listening || live.stopping || live.starting;
+  document.body.classList.toggle("live-capturing", capturing);
   const busy = capturing || live.processing || live.pending.length > 0 || !!live.questionController;
   for (const id of ["live-speaker", "live-round", "live-speech-language", "live-asr"]) el(id).disabled = capturing;
   for (const id of ["new-match", "resume-match", "live-saved-matches"]) el(id).disabled = busy;
@@ -89,6 +92,7 @@ async function loadMatches(append = false) {
   el("more-matches").hidden = data.items.length < 30;
 }
 function openSession(data) {
+  document.body.classList.add("live-active");
   live.session = data.session; live.records = data.records; live.advice = "";
   el("live-arena").hidden = false; el("new-match").hidden = false;
   el("live-motion").value = live.session.motion;
@@ -99,6 +103,7 @@ function openSession(data) {
   el("live-setup").hidden = true;
   el("live-match-summary").hidden = false;
   el("live-match-motion").textContent = live.session.motion;
+  el("live-match-motion").title = live.session.motion;
   el("live-match-role").textContent = `我方：${sideName(live.session.side)} · 我的发言：${roundName(live.session.speaking_round)} · 建议语言：${live.session.language}`;
   document.querySelector(".live-resume").hidden = true;
   el("live-speaker").value = live.session.side;
@@ -106,18 +111,14 @@ function openSession(data) {
   el("live-transcript").textContent = "开始监听，或在下方补录发言。";
   el("live-advice").replaceChildren(node("p", "等待新发言，或在下方提问。", "live-empty"));
   el("copy-advice").disabled = true;
-  renderRecords(); queueStatus(); error("");
+  live.followRecords = true;
+  renderRecords(); queueStatus(); error(""); selectPane("records"); selectResponse("advice");
   el("live-answer").replaceChildren(); el("live-answer").hidden = true;
   el("question-status").textContent = "";
   asrHelp();
   history.replaceState(null, "", `/live?session=${live.session.session_id}`);
-  el("live-arena").scrollIntoView({behavior: "smooth", block: "start"});
 }
-function renderRecords() {
-  const list = el("live-records"); list.replaceChildren();
-  el("record-count").textContent = `${live.records.length} 条摘要`;
-  if (!live.records.length) list.append(node("p", "等待发言，观点和证据摘要会自动保存在这里。", "live-empty"));
-  live.records.slice().reverse().forEach((record) => {
+function recordNode(record) {
     const article = node("article", undefined, "live-record");
     article.id = `record-${record.event_id}`;
     const header = node("header");
@@ -127,8 +128,40 @@ function renderRecords() {
     if (record.key_points.length) article.append(bullets(record.key_points));
     if (record.evidence.length) article.append(node("strong", "证据 · 发言者声称，待核实"), bullets(record.evidence));
     if (record.uncertainties.length) article.append(node("p", `需确认：${record.uncertainties.join("；")}`, "uncertain"));
-    list.append(article);
+    return article;
+}
+function followLatest() {
+  el("follow-records").setAttribute("aria-pressed", String(live.followRecords));
+  if (live.followRecords) requestAnimationFrame(() => {
+    const list = el("live-records");
+    list.scrollTop = list.scrollHeight;
   });
+}
+function renderRecords() {
+  const list = el("live-records"); list.replaceChildren();
+  el("record-count").textContent = `${live.records.length} 条摘要`;
+  if (!live.records.length) list.append(node("p", "等待发言，观点和证据摘要会自动保存在这里。", "live-empty"));
+  live.records.forEach(record => list.append(recordNode(record)));
+  followLatest();
+}
+function selectResponse(tab) {
+  live.responseTab = tab;
+  el("live-advice-body").hidden = tab !== "advice";
+  el("live-question-panel").hidden = tab !== "question";
+  document.querySelectorAll("[data-response]").forEach(button => {
+    button.setAttribute("aria-selected", String(button.dataset.response === tab));
+    button.tabIndex = button.dataset.response === tab ? 0 : -1;
+  });
+  el("copy-advice").hidden = tab !== "advice";
+}
+function selectPane(pane) {
+  live.pane = pane; document.querySelector(".live-columns").dataset.view = pane;
+  document.querySelectorAll("[data-pane]").forEach(button => {
+    button.setAttribute("aria-selected", String(button.dataset.pane === pane));
+    button.tabIndex = button.dataset.pane === pane ? 0 : -1;
+  });
+  if (pane !== "records") selectResponse(pane);
+  else followLatest();
 }
 function bullets(items) {
   const list = node("ul");
@@ -139,7 +172,13 @@ function addRecord(record) {
   if (!live.records.some(r => r.event_id === record.event_id)) {
     live.records.push(record);
     live.records.sort((a, b) => a.captured_at.localeCompare(b.captured_at));
-    renderRecords();
+    const list = el("live-records");
+    list.querySelector(".live-empty")?.remove();
+    const index = live.records.findIndex(r => r.event_id === record.event_id);
+    const next = live.records[index + 1];
+    list.insertBefore(recordNode(record), next ? el(`record-${next.event_id}`) : null);
+    el("record-count").textContent = `${live.records.length} 条摘要`;
+    followLatest();
   }
 }
 function showAdvice(advice, label, version, target = "live-advice") {
@@ -155,6 +194,14 @@ function showAdvice(advice, label, version, target = "live-advice") {
     cited.forEach(record => {
       const link = node("a", `${sideName(record.speaker_side)} · ${roundName(record.round)}：${record.summary.slice(0, 45)}`);
       link.href = `#record-${record.event_id}`;
+      link.addEventListener("click", event => {
+        event.preventDefault(); live.followRecords = false; selectPane("records");
+        followLatest();
+        requestAnimationFrame(() => {
+          const list = el("live-records"), article = el(`record-${record.event_id}`);
+          list.scrollTop += article.getBoundingClientRect().top - list.getBoundingClientRect().top - 8;
+        });
+      });
       links.append(link, node("br"));
     });
     panel.append(links);
@@ -164,6 +211,7 @@ function showAdvice(advice, label, version, target = "live-advice") {
     el("copy-advice").disabled = false;
     el("advice-status").textContent = label;
   } else el("question-status").textContent = label;
+  requestAnimationFrame(() => { panel.scrollTop = 0; });
 }
 function speakerNow() {
   return {side: el("live-speaker").value, round: el("live-round").value};
@@ -280,7 +328,7 @@ function startBrowser() {
     }, 250);
   };
   recognition.start();
-  live.flushTimer = setInterval(flushText, 8000);
+  live.flushTimer = setInterval(flushText, AUDIO_CHUNK_SECONDS * 1000);
 }
 function wav(samples, sourceRate) {
   const rate = 16000, length = Math.floor(samples.length * rate / sourceRate);
@@ -321,7 +369,7 @@ async function startServer() {
     const receive = (data) => {
       if (!live.listening) return;
       live.frames.push(data); live.sampleCount += data.length;
-      if (live.sampleCount >= context.sampleRate * 5) flushAudio();
+      if (live.sampleCount >= context.sampleRate * AUDIO_CHUNK_SECONDS) flushAudio();
     };
     let moduleTimer, capture;
     try {
@@ -399,6 +447,7 @@ async function pauseListening() {
 }
 async function ask(message) {
   if (!live.session || live.questionController) return;
+  selectPane("question");
   error("");
   const controller = new AbortController(); live.questionController = controller;
   const timer = setTimeout(() => controller.abort(), 150000);
@@ -421,7 +470,7 @@ async function ask(message) {
 function asrHelp() {
   const mode = el("live-asr").value;
   el("asr-help").textContent = mode === "server"
-    ? "服务器 ASR 模型：每约 5 秒识别一段，再提炼摘要。双方轮流发言；换人时先暂停再切换。网络或模型较慢时会自动暂停，防止积压。"
+    ? "服务器 ASR 模型：每约 10 秒识别一段，再提炼摘要。暂停时处理不足 10 秒的末段。双方轮流发言；换人时先暂停再切换。处理积压时会自动暂停。"
     : mode === "manual"
       ? "无需麦克风，在下方补录双方发言。先选择正确的发言方和轮次。"
       : "浏览器语音识别（非本站配置的大模型 ASR）。建议使用 Chrome；需要麦克风权限和识别服务网络。换人时先暂停，再切换发言方。";
@@ -429,6 +478,50 @@ function asrHelp() {
   if (mode === "manual" && live.session) document.querySelector(".live-manual").open = true;
 }
 async function init() {
+  function fitViewport() {
+    document.documentElement.style.setProperty("--live-viewport-height", `${window.visualViewport?.height || window.innerHeight}px`);
+  }
+  fitViewport();
+  window.visualViewport?.addEventListener("resize", fitViewport);
+  window.addEventListener("resize", fitViewport);
+  el("follow-records").addEventListener("click", () => { live.followRecords = true; followLatest(); });
+  el("live-records").addEventListener("scroll", () => {
+    const list = el("live-records");
+    if (!list.clientHeight) return;
+    live.followRecords = list.scrollHeight - list.clientHeight - list.scrollTop < 48;
+    el("follow-records").setAttribute("aria-pressed", String(live.followRecords));
+  }, {passive: true});
+  document.querySelectorAll("[data-pane]").forEach(button => button.addEventListener("click", () => selectPane(button.dataset.pane)));
+  document.querySelectorAll("[data-response]").forEach(button => button.addEventListener("click", () => selectPane(button.dataset.response)));
+  document.querySelectorAll('[role="tablist"]').forEach(tabs => tabs.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const buttons = Array.from(tabs.querySelectorAll('[role="tab"]'));
+    let index = buttons.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    index = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+      : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[index].click(); buttons[index].focus();
+  }));
+  el("audio-options-toggle").addEventListener("click", () => {
+    const open = document.querySelector(".live-controls").classList.toggle("audio-options-open");
+    el("audio-options-toggle").setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", event => {
+    if (!event.target.closest(".live-controls")) {
+      document.querySelector(".live-controls").classList.remove("audio-options-open");
+      el("audio-options-toggle").setAttribute("aria-expanded", "false");
+    }
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      document.querySelector(".live-controls").classList.remove("audio-options-open");
+      el("audio-options-toggle").setAttribute("aria-expanded", "false");
+      document.querySelector(".live-manual").open = false;
+      document.querySelector(".live-help").open = false;
+    }
+  });
+  el("close-manual").addEventListener("click", () => { document.querySelector(".live-manual").open = false; });
   el("live-setup").addEventListener("submit", async event => {
     event.preventDefault(); el("create-match").disabled = true; error("");
     try {
@@ -448,6 +541,7 @@ async function init() {
     else el("live-motion").value = "";
   });
   el("new-match").addEventListener("click", () => {
+    document.body.classList.remove("live-active");
     live.session = null; live.records = []; live.advice = ""; live.finalText = ""; live.interimText = "";
     el("manual-turn").value = ""; el("live-query").value = "";
     el("live-arena").hidden = true; el("new-match").hidden = true;
@@ -472,6 +566,7 @@ async function init() {
     if (!text || live.failed || live.pending.length >= 8) return;
     enqueue({turn: turnFor(text, speakerNow())});
     el("manual-turn").value = "";
+    document.querySelector(".live-manual").open = false;
   });
   el("live-query-form").addEventListener("submit", event => { event.preventDefault(); if (el("live-query").value.trim()) ask(el("live-query").value.trim()); });
   document.querySelectorAll("[data-question]").forEach(button => button.addEventListener("click", () => {

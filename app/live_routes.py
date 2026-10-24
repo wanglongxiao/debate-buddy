@@ -44,7 +44,7 @@ def install_live_routes(app, settings, require_storage, get_repository):
             "llm_configured": settings.llm_ready,
             "storage_ready": ready and user is not None,
             "is_guest": user.is_guest if user else True,
-            "audio_chunk_seconds": 5,
+            "audio_chunk_seconds": 10,
             "max_audio_bytes": 1_000_000,
         }
 
