@@ -609,6 +609,15 @@ class GenerationRepository:
                     timestamp.isoformat(),
                 ),
             )
+            if response.change_summary:
+                connection.execute(
+                    """
+                    INSERT INTO pack_messages (
+                        message_id, generation_id, role, content, created_at
+                    ) VALUES (?, ?, 'assistant', ?, ?)
+                    """,
+                    (uuid.uuid4().hex, generation_id, response.change_summary, timestamp.isoformat()),
+                )
             return True
 
     def _save_version_sync(

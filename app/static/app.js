@@ -8,6 +8,8 @@ const state = {
   progressPercent: 0,
   user: null,
   currentPack: null,
+  selectedSection: 1,
+  sectionObserver: null,
   historyQueryTimer: null,
   webpageTimeoutSeconds: Number(
     document.body.dataset.webpageTimeoutSeconds || 1800,
@@ -67,7 +69,19 @@ const copy = {
     updated: "Updated",
     saved: "Version saved.",
     restored: "Version restored.",
-    agentWorking: "Updating the complete pack...",
+    agentWorking: "Updating only the relevant sections...",
+    exportWord: "Word speech",
+    generateWord: "Generate and download Word",
+    wordHint: "Select material for your role speech. Only selected sections will be used.",
+    wordWorking: "Writing your role speech…",
+    refineHistory: "Update history",
+    refineScope: "Update",
+    autoScope: "Auto: only necessary sections",
+    copySection: "Copy",
+    voiceInput: "Voice input",
+    voiceStop: "Stop & transcribe",
+    voiceCancel: "Cancel",
+    voiceRetry: "Retry",
     generate: "Generate my prep pack",
     stopGeneration: "Stop generation",
     stoppingGeneration: "Stopping...",
@@ -77,7 +91,7 @@ const copy = {
     elapsed: "Elapsed",
     currentlyWorking: "Still working",
     readyTitle: "Ready when you are",
-    readyText: "Your research, case, questions, speeches, and practice plan will appear here.",
+    readyText: "A short summary, sourced evidence, case and questions will appear here.",
     researching: "Building your prep pack",
     loadingOne: "Reading the motion and finding both sides...",
     prepPack: "PREP PACK",
@@ -89,10 +103,8 @@ const copy = {
     copied: "Copied to clipboard.",
     downloaded: "Markdown downloaded.",
     sections: [
-      "Motion Understanding", "Definitions", "Overall Case Strategy",
-      "Attack & Defense", "Cross Fire", "Team Outline",
-      "1st Speaker Speech", "My Role Research", "Evidence Bank",
-      "Vocabulary Builder", "Practice Plan",
+      "Quick Summary", "Motion & Definitions", "Evidence Bank",
+      "Core Case", "Attack & Defense", "Cross Fire", "Speech Starter",
     ],
   },
   zh: {
@@ -147,7 +159,19 @@ const copy = {
     updated: "更新于",
     saved: "版本已保存。",
     restored: "版本已恢复。",
-    agentWorking: "正在更新完整准备包...",
+    agentWorking: "正在更新相关部分…",
+    exportWord: "辩位发言稿 Word",
+    generateWord: "一键生成并下载 Word",
+    wordHint: "选择要使用的准备资料，根据辩位生成发言稿，仅使用所选部分。",
+    wordWorking: "正在撰写你的辩位发言稿…",
+    refineHistory: "多轮更新记录",
+    refineScope: "更新范围",
+    autoScope: "自动：仅修改必要部分",
+    copySection: "复制",
+    voiceInput: "语音输入",
+    voiceStop: "结束并转文字",
+    voiceCancel: "取消",
+    voiceRetry: "重试识别",
     generate: "生成辩论准备包",
     stopGeneration: "停止生成",
     stoppingGeneration: "正在停止...",
@@ -157,7 +181,7 @@ const copy = {
     elapsed: "已用时",
     currentlyWorking: "生成仍在进行",
     readyTitle: "准备好了就开始",
-    readyText: "研究、论点、提问、发言稿和练习计划会显示在这里。",
+    readyText: "速读摘要、证据、核心论证和质询会显示在这里。",
     researching: "正在生成辩论准备包",
     loadingOne: "正在理解辩题并研究双方观点...",
     prepPack: "辩论准备包",
@@ -169,8 +193,7 @@ const copy = {
     copied: "已复制。",
     downloaded: "Markdown 已下载。",
     sections: [
-      "辩题解读", "概念定义", "整体策略", "攻防地图", "交叉质询",
-      "团队大纲", "一辩发言稿", "我的辩位研究", "证据库", "词汇表", "练习计划",
+      "速读摘要", "辩题与定义", "证据库", "核心论证", "攻防回应", "交叉质询", "开篇短稿",
     ],
   },
 };
@@ -196,7 +219,7 @@ Object.assign(progressStepLabels.en, {
   reasoning_about_strategy: "Model is reasoning about case strategy",
   drafting_arguments: "Drafting arguments and responses",
   checking_case_consistency: "Checking the case for consistency",
-  writing_pack: "Writing speeches, cross-fire, and vocabulary",
+  writing_pack: "Writing the compact pack and detailed evidence",
   reasoning_about_cross_fire: "Reasoning about cross-fire questions",
   building_vocabulary: "Building the debate vocabulary",
   planning_speeches: "Planning speeches for the selected roles",
@@ -205,7 +228,7 @@ Object.assign(progressStepLabels.en, {
   cross_fire_ready: "Cross-fire questions completed",
   vocabulary_ready: "Vocabulary completed",
   speeches_ready: "Speeches and role research completed",
-  reading_pack: "Reading the complete existing pack",
+  reading_pack: "Reading current content and recent requests",
   loading_new_sources: "Opening new sources from your message",
   updating_pack: "Reasoning over the pack and your request",
   model_reading_context: "Model is reading the complete pack context",
@@ -236,7 +259,7 @@ Object.assign(progressStepLabels.zh, {
   reasoning_about_strategy: "大模型正在推理整体策略",
   drafting_arguments: "撰写论点、攻击与回应",
   checking_case_consistency: "检查整套论证的一致性",
-  writing_pack: "编写演讲稿、交叉质询和词汇",
+  writing_pack: "编写紧凑准备包与详细证据",
   reasoning_about_cross_fire: "推理交叉质询问题",
   building_vocabulary: "整理辩论词汇",
   planning_speeches: "规划所选辩位的演讲稿",
@@ -245,7 +268,7 @@ Object.assign(progressStepLabels.zh, {
   cross_fire_ready: "交叉质询已完成",
   vocabulary_ready: "词汇表已完成",
   speeches_ready: "演讲稿与辩位研究已完成",
-  reading_pack: "读取现有研究包的全部内容",
+  reading_pack: "读取当前内容和最近要求",
   loading_new_sources: "读取本次输入中的新资料",
   updating_pack: "结合完整研究包处理新要求",
   model_reading_context: "大模型正在读取完整研究包",
@@ -270,6 +293,11 @@ const esc = (value = "") =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
+const sectionKeys = [
+  ["summary"], ["motion_understanding", "definitions"], ["evidence_bank"],
+  ["overall_case_strategy"], ["attack_defense_map"], ["cross_fire"], ["first_speaker_speech"],
+];
+
 function init() {
   applyLanguage(state.uiLanguage);
   $(".language-switch").addEventListener("click", handleLanguageSwitch);
@@ -280,6 +308,15 @@ function init() {
   $("#download-markdown").addEventListener("click", downloadMarkdown);
   $("#print-pdf").addEventListener("click", () => window.print());
   $("#result-sections").addEventListener("click", handleSectionCopy);
+  $("#section-nav").addEventListener("click", event => {
+    const link = event.target.closest("[data-section]");
+    if (!link) return;
+    event.preventDefault();
+    activateSection(Number(link.dataset.section));
+    $(`#section-${link.dataset.section}`).scrollIntoView({behavior: "smooth", block: "start"});
+  });
+  $("#export-word").addEventListener("click", openWordExport);
+  $("#word-form").addEventListener("submit", generateWord);
   $("#history-button").addEventListener("click", showHistory);
   $("#new-prep-button").addEventListener("click", showHome);
   $("#profile-button").addEventListener("click", openProfile);
@@ -325,7 +362,7 @@ function applyLanguage(language) {
     element.placeholder = copy[language][element.dataset.i18nPlaceholder] || "";
   });
   if (state.activeGeneration) renderProgress(state.activeGeneration.lastEvent);
-  if (state.result) renderResult(state.result);
+  if (state.result) renderResult(state.result, true);
 }
 
 function changeTime(delta) {
@@ -428,7 +465,7 @@ function setLoading(isLoading) {
   if (window.lucide) window.lucide.createIcons();
 }
 
-function renderResult(response) {
+function renderResult(response, preservePosition = false) {
   const result = response.structured_result;
   $("#pack-live-link").href = response.generation_id
     ? `/live?pack=${encodeURIComponent(response.generation_id)}` : "/live";
@@ -446,27 +483,90 @@ function renderResult(response) {
   warningBox.innerHTML = warnings.map((warning) => `<p>${esc(warning)}</p>`).join("");
 
   const sections = [
-    renderMotion(result.motion_understanding),
-    renderDefinitions(result.definitions),
+    `<p class="pack-summary">${esc(result.summary || result.overall_case_strategy.one_sentence_stance)}</p>`,
+    renderMotion(result.motion_understanding) + renderDefinitions(result.definitions),
+    renderEvidence(result.evidence_bank),
     renderStrategy(result.overall_case_strategy),
     renderAttackDefense(result.attack_defense_map),
     renderCrossFire(result.cross_fire),
-    renderTeamOutline(result.team_outline),
     renderFirstSpeech(result.first_speaker_speech),
-    renderRoles(result.my_role_research),
-    renderEvidence(result.evidence_bank),
-    renderVocabulary(result.vocabulary_builder),
-    renderPractice(result.practice_plan),
   ];
 
   $("#section-nav").innerHTML = labels
-    .map((label, index) => `<a href="#section-${index + 1}">${index + 1}. ${esc(label)}</a>`)
+    .map((label, index) => `<a href="#section-${index + 1}" data-section="${index + 1}"><b>${index + 1}</b>${esc(label)}</a>`)
     .join("");
   $("#result-sections").innerHTML = sections
     .map((body, index) => section(index + 1, labels[index], body))
     .join("");
+  const scope = $("#refine-scope").value;
+  $("#refine-scope").innerHTML = `<option value="">${esc(copy[state.uiLanguage].autoScope)}</option>` +
+    labels.map((label, i) => `<option value="${i}">${esc(label)}</option>`).join("");
+  $("#refine-scope").value = scope;
+  state.sectionObserver?.disconnect();
+  state.sectionObserver = new IntersectionObserver(entries => {
+    const visible = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+    if (visible.length) activateSection(Number(visible[0].target.id.split("-")[1]));
+  }, {rootMargin: "-90px 0px -65% 0px"});
+  $$(".result-section").forEach(element => state.sectionObserver.observe(element));
+  activateSection(state.selectedSection);
+  renderRefineHistory();
+  document.body.classList.add("has-pack");
   if (window.lucide) window.lucide.createIcons();
-  $("#result-state").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (!preservePosition) $("#result-state").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function activateSection(number) {
+  state.selectedSection = number;
+  $$("#section-nav a").forEach(link => {
+    link.classList.toggle("active", Number(link.dataset.section) === number);
+    if (Number(link.dataset.section) === number) link.setAttribute("aria-current", "location");
+    else link.removeAttribute("aria-current");
+  });
+}
+
+function renderRefineHistory() {
+  const messages = state.currentPack?.messages || [];
+  $("#refine-history").innerHTML = messages.slice(-12).map(message =>
+    `<p><strong>${message.role === "user" ? (state.uiLanguage === "zh" ? "你的要求" : "You") : "Coach"}:</strong> ${esc(message.content)}</p>`).join("");
+}
+
+function openWordExport() {
+  $("#word-role").value = state.result.structured_result.speaker_roles[0] || "1st Speaker";
+  $("#word-sections").innerHTML = copy[state.uiLanguage].sections.map((title, i) =>
+    `<label><input type="checkbox" value="${i}" ${i < 5 ? "checked" : ""}> ${esc(title)}</label>`).join("");
+  $("#word-status").textContent = "";
+  $("#word-dialog").showModal();
+}
+
+async function generateWord(event) {
+  event.preventDefault();
+  const selected = $$("#word-sections input:checked").map(input => Number(input.value));
+  if (!selected.length) {
+    $("#word-status").textContent = state.uiLanguage === "zh" ? "请至少选择一个部分。" : "Select at least one section.";
+    return;
+  }
+  const button = $("#word-submit");
+  button.disabled = true;
+  $("#word-status").textContent = copy[state.uiLanguage].wordWorking;
+  try {
+    const packSnapshot = state.result.structured_result;
+    const material = selected.map(i => ({
+      title: copy[state.uiLanguage].sections[i],
+      text: $(`#section-${i + 1} .section-body`).innerText +
+        (i === 2 ? "\n" + packSnapshot.evidence_bank.map(e => `${e.source_title}: ${e.source_url}`).join("\n") : ""),
+    }));
+    const payload = {role: $("#word-role").value, sections: selected.flatMap(i => sectionKeys[i])};
+    const url = state.currentPack?.generation_id
+      ? `/api/history/${state.currentPack.generation_id}/speech` : "/api/pack/speech";
+    if (!state.currentPack?.generation_id) payload.pack = packSnapshot;
+    const speech = await api(url, {
+      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload),
+    });
+    await window.downloadDebateWord(speech, packSnapshot, material);
+    $("#word-status").textContent = state.uiLanguage === "zh" ? "Word 已下载。" : "Word downloaded.";
+  } catch (error) {
+    $("#word-status").textContent = error.message;
+  } finally { button.disabled = false; }
 }
 
 function section(number, title, body) {
@@ -475,8 +575,8 @@ function section(number, title, body) {
       <header class="section-header">
         <span class="section-number">${number}</span>
         <h3>${esc(title)}</h3>
-        <button class="copy-section" type="button" title="Copy section" aria-label="Copy section">
-          <i data-lucide="copy"></i>
+        <button class="copy-section" type="button" title="${esc(copy[state.uiLanguage].copySection)}" aria-label="${esc(copy[state.uiLanguage].copySection)} ${esc(title)}">
+          <i data-lucide="copy"></i><span>${esc(copy[state.uiLanguage].copySection)}</span>
         </button>
       </header>
       <div class="section-body">${body}</div>
@@ -487,23 +587,16 @@ function renderMotion(data) {
   return `
     <p>${esc(data.plain_meaning)}</p>
     <div class="key-line"><strong>Main clash:</strong> ${esc(data.main_clash)}</div>
-    <h4>Key concepts</h4>
-    ${list(data.key_concepts.map((item) => `<strong>${esc(item.term)}:</strong> ${esc(item.simple_explanation)}`), true)}
     <h4>What each side must prove</h4>
     <p><strong>Proposition:</strong> ${esc(data.proposition_burden)}</p>
-    <p><strong>Opposition:</strong> ${esc(data.opposition_burden)}</p>
-    <h4>Easy attacks against the opponent</h4>${list(data.easy_attacks_against_opponent)}
-    <h4>Risks for our side</h4>${list(data.risks_for_our_side)}`;
+    <p><strong>Opposition:</strong> ${esc(data.opposition_burden)}</p>`;
 }
 
 function renderDefinitions(items) {
   return items.map((item) => `
     <div class="argument-block">
       <h4>${esc(item.term)}</h4>
-      <p><strong>Possible meanings:</strong> ${esc(item.possible_definitions.join("; "))}</p>
-      <p><strong>Recommended:</strong> ${esc(item.recommended_definition)}</p>
-      <p><strong>Why it helps:</strong> ${esc(item.why_it_helps)}</p>
-      <p><strong>Possible challenge:</strong> ${esc(item.possible_challenge)}</p>
+      <p>${esc(item.recommended_definition)}</p>
     </div>`).join("") || "<p>No definitions returned.</p>";
 }
 
@@ -517,36 +610,23 @@ function renderStrategy(data) {
         <p><strong>Evidence direction:</strong> ${esc(item.evidence_direction)}</p>
         <p class="practice-line">You can say: “${esc(item.practice_line)}”</p>
       </div>`).join("")}
-    <p><strong>Strongest argument:</strong> ${esc(data.strongest_argument)}</p>
-    <p><strong>Most vulnerable:</strong> ${esc(data.most_vulnerable_argument)}</p>
-    <h4>Emphasize</h4>${list(data.emphasize)}
-    <h4>Avoid</h4>${list(data.avoid)}`;
+    <p><strong>Main risk:</strong> ${esc(data.most_vulnerable_argument)}</p>`;
 }
 
 function renderAttackDefense(items) {
-  const rows = items.map((item) => `
-    <tr>
-      <td>${esc(item.opponent_point)}</td>
-      <td>${esc(item.our_attack_or_risk)}</td>
-      <td>${esc(item.our_response)}</td>
-      <td>${esc(item.practice_line)}</td>
-    </tr>`).join("");
-  return table(["Opponent point", "Our attack or risk", "Our response", "Practice line"], rows);
+  return items.map(item => `<div class="argument-block">
+    <p><strong>They may argue:</strong> ${esc(item.opponent_point)}</p>
+    <p><strong>Respond:</strong> ${esc(item.our_response)}</p></div>`).join("");
 }
 
 function renderCrossFire(data) {
   return `
-    <h4>Goals</h4>${list(data.goals)}
     ${data.questions.map((item, index) => `
       <div class="question-block">
         <h4>${index + 1}. “${esc(item.question)}”</h4>
-        <p><strong>Purpose:</strong> ${esc(item.purpose)}</p>
         <p><strong>If yes:</strong> ${esc(item.follow_up_if_yes)}</p>
         <p><strong>If no:</strong> ${esc(item.follow_up_if_no)}</p>
-        <p><strong>Best for:</strong> ${esc(item.best_for)}</p>
-      </div>`).join("")}
-    <h4>Keep emphasizing</h4>${list(data.emphasize)}
-    <h4>Avoid</h4>${list(data.avoid)}`;
+      </div>`).join("")}`;
 }
 
 function renderTeamOutline(data) {
@@ -566,8 +646,6 @@ function renderTeamOutline(data) {
 
 function renderFirstSpeech(data) {
   return `
-    <h4>Outline</h4>${list(data.outline, false, true)}
-    <h4>Speech text</h4>
     <div class="speech-text">${esc(data.speech_text)}</div>`;
 }
 
@@ -603,8 +681,12 @@ function renderEvidence(items) {
         ${item.credibility === "Needs verification" ? '<span class="status-badge">Needs verification</span>' : ""}
       </h4>
       <p><strong>Fact:</strong> ${esc(item.evidence_summary)}</p>
+      ${item.source_excerpt ? `<blockquote>${esc(item.source_excerpt)}</blockquote>` : ""}
+      ${item.context_and_method ? `<p><strong>Context / method:</strong> ${esc(item.context_and_method)}</p>` : ""}
+      ${item.limitations ? `<p class="evidence-limits"><strong>Limitations:</strong> ${esc(item.limitations)}</p>` : ""}
       <p><strong>Source:</strong> <a class="source-link" href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">${esc(item.source_title)}</a></p>
       <p><strong>Date:</strong> ${esc(item.published_date_or_accessed_at)}</p>
+      <p class="field-help">${esc(item.source_type)} · ${esc(item.credibility)}</p>
       <p><strong>Why it helps:</strong> ${esc(item.why_it_helps_our_side)}</p>
       <p class="practice-line">You can say: “${esc(item.simple_practice_line)}”</p>
     </div>`).join("");
@@ -652,7 +734,7 @@ async function handleSectionCopy(event) {
   const button = event.target.closest(".copy-section");
   if (!button) return;
   const sectionElement = button.closest(".result-section");
-  await copyText(sectionElement.innerText.replace("Copy section", "").trim());
+  await copyText(sectionElement.querySelector("h3").innerText + "\n\n" + sectionElement.querySelector(".section-body").innerText);
 }
 
 async function copyText(text) {
@@ -870,6 +952,7 @@ function updateElapsed(startedAt) {
 }
 
 function lockInterface(locked, kind) {
+  $$(".voice-start, .voice-language").forEach(element => element.disabled = locked);
   $$("#history-button, #profile-button, [data-ui-language]").forEach(
     (element) => {
       element.disabled = locked;
@@ -883,6 +966,7 @@ function lockInterface(locked, kind) {
       });
   } else {
     $("#agent-message").disabled = locked;
+    $("#export-word").disabled = locked;
     $$(".pack-action").forEach((button) => {
       button.disabled = locked;
     });
@@ -975,6 +1059,7 @@ function showHome() {
   state.currentPack = null;
   state.result = null;
   state.markdown = "";
+  document.body.classList.remove("has-pack");
   $("#result-state").hidden = true;
   $("#empty-state").hidden = false;
   updatePackMode(false);
@@ -1076,14 +1161,14 @@ async function submitAgentMessage(event) {
   try {
     const pack = await consumeProgressStream(
       `/api/history/${state.currentPack.generation_id}/agent/stream`,
-      { message },
+      { message, sections: $("#refine-scope").value === "" ? [] : sectionKeys[Number($("#refine-scope").value)] },
       controller,
     );
     input.value = "";
     state.currentPack = pack;
     state.result = pack.latest;
     state.markdown = pack.latest.markdown_result;
-    renderResult(pack.latest);
+    renderResult(pack.latest, true);
   } catch (requestError) {
     showToast(
       state.activeGeneration?.cancelledByUser
@@ -1106,7 +1191,7 @@ function setAgentLoading(isLoading) {
   $("#agent-progress").hidden = !isLoading;
   $("#agent-status").textContent = isLoading
     ? copy[state.uiLanguage].agentWorking
-    : "";
+    : state.result?.change_summary || "";
   if (!isLoading) {
     button.classList.remove("stop-button");
     button.innerHTML = '<i data-lucide="arrow-up"></i>';

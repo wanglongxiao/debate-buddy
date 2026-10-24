@@ -5,30 +5,36 @@
 Debate Buddy is an AI-powered debate research and practice assistant for
 students and teams. It turns a motion, side, speaking time, and selected speaker
 roles into a structured preparation pack with research, verified source links,
-argument chains, rebuttals, speeches, and practical exercises.
+short arguments, rebuttals, and role-specific Word speeches.
 
 ## Core Features
 
 - **AI-powered deep research** for both sides of a debate motion
 - **Claim and evidence-chain verification** with source URLs, dates, source
   types, credibility labels, and explicit warnings when evidence is uncertain
-- **Human-friendly debate practice** with simple explanations, speaking lines,
-  cross-fire questions, vocabulary, and a step-by-step practice plan
-- **Team case generation** with definitions, burdens, main arguments, clash
-  analysis, attack-and-defense maps, and a complete team split
+- **Compact preparation** with a 45-word quick summary, two core arguments,
+  short responses, three cross-fire questions and enforced length limits
+- **Evidence first** in section 3: source excerpts, study context and method,
+  dates, credibility, practical use and explicit limitations
+- **Case generation** with definitions, burdens, main arguments, clash
+  analysis and attack-and-defense maps
 - **Individual speaker preparation** for first, second, third, and
   reply/summary speakers
-- **Debate speech generation**, including a complete first-speaker speech and
-  role-specific outlines and scripts
+- **Role-based Word export**: select pack sections and your role to generate
+  a timed speech, outline and selected source material in a real `.docx` file
 - **English, Chinese, and bilingual output**
-- **Markdown export, section copying, and print-to-PDF support**
+- **Sticky left directory**, visible copy buttons, Markdown and print-to-PDF export
 - **Responsive Web UI** for desktop and mobile browsers
 - **Guest and registered profiles** with isolated debate packs and secure
   password hashing
 - **360-day persistent history** using SQLite locally or BytePlus TOS in the
   cloud, with search, update sorting, deletion, and automatic expiration
-- **Living debate packs** with an AI update prompt, three saved versions, and
-  one-click version restore
+- **Fast, multi-round refinements** with automatic or explicit section scope;
+  only changed sections are returned and untouched content is preserved
+- **Voice input** for motions, source notes and refinements: record up to
+  25 seconds, stop to transcribe, edit appended text and submit; failed ASR can
+  be retried without recording again
+- **Saved versions** with three snapshots and one-click restore
 - **Live generation progress** with current stage, source activity, elapsed
   time, input locking, and true request cancellation
 - **Live debate coaching** at `/live`: prepared or new motions, required side
@@ -107,7 +113,7 @@ summaries for a local copy. Questions and generated advice are not retained.
 
 | Service | How Debate Buddy Uses It |
 | --- | --- |
-| **BytePlus ModelArk** | Runs the language model workflow for motion analysis, evidence evaluation, argument construction, rebuttal planning, speech writing, and vocabulary generation. |
+| **BytePlus ModelArk** | Generates compact evidence-based packs, section updates, role speeches and live coaching. |
 | **BytePlus veFaaS** | Hosts the FastAPI application with elastic compute, request-level concurrency, and a minimum of one and maximum of two cloud instances. |
 | **BytePlus API Gateway** | Provides the public HTTPS endpoint, forwards all Web UI and API routes to veFaaS, and supports long-running generation requests. |
 | **BytePlus TOS** | Persists private user profiles, sessions, debate packs, messages, and versions across elastic instances, with 360-day lifecycle expiration for pack and session objects. |
@@ -120,23 +126,32 @@ summaries for a local copy. Questions and generated advice are not retained.
 3. Choose the speech duration and one or more speaker roles.
 4. Select Quick Prep, Standard Prep, or Deep Research.
 5. Optionally provide notes, source excerpts, public URLs, or a mixture.
-6. Debate Buddy researches the topic, evaluates evidence, builds the case, and
-   generates team and individual preparation materials while streaming the
-   current stage, source activity, and elapsed time to the browser.
+6. Debate Buddy researches the topic and generates the compact pack in one model
+   call while streaming progress, source activity and elapsed time.
+7. Use the left directory and copy buttons. Choose **Word speech** to select
+   source sections and your role. At the bottom, type or dictate a change and
+   choose its section scope. Continue refining over multiple rounds.
 
 The result includes:
 
-- Motion understanding and key definitions
-- Proposition and opposition burdens
-- Main arguments and strategic priorities
-- Attack-and-defense map
+- Quick summary
+- Motion, definitions and both sides' burdens
+- Detailed evidence bank
+- Two core arguments and the main risk
+- Short attack-and-defense responses
 - Cross-fire questions and follow-ups
-- Team speaker outline
-- First-speaker speech
-- Role-specific research and speech text
-- Evidence bank
-- Vocabulary builder
-- Practice plan
+- Short opening starter
+
+Team outline, role deep research, vocabulary and practice-plan modules are no
+longer generated or displayed. Full timed speeches are generated only on Word
+export. Generation and updates disable model thinking and enforce per-call
+output limits. Refinements use the current pack and bounded recent requests.
+Existing evidence facts are preserved unless new source text supports a correction.
+
+Input dictation shares the configured Seed-Speech service with Live debate
+through `/api/audio/transcribe`, without creating a live match. Audio remains
+in memory. Transcribed text is appended to typed input and is never submitted
+automatically. Choose Chinese or English beside the microphone button.
 
 ## Research and Evidence
 
@@ -160,9 +175,9 @@ The automatic provider order is:
 6. DuckDuckGo
 
 Low-quality social and document-sharing sources are filtered. Manual URLs are
-validated to block private and local network addresses. The application keeps
-real source information when AI evaluation fails and never invents replacement
-citations.
+validated to block private and local network addresses. Generated citations are
+restricted to collected sources, and direct excerpts must match source text.
+Missing details must be marked as unavailable.
 
 ## Technology
 
@@ -174,6 +189,15 @@ citations.
 - HTTPX and Beautiful Soup
 - Playwright for optional local browser research
 - Plain HTML, CSS, and JavaScript
+- Locally bundled `docx-js` for Word downloads; no Node runtime needed in cloud
+
+Rebuild the Word bundle after editing `web-tools/word-export.js`:
+
+```bash
+cd web-tools
+npm ci
+npm run build
+```
 
 ## Local Setup
 

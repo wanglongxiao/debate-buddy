@@ -166,6 +166,9 @@ class EvidenceItem(BaseModel):
     credibility: str
     why_it_helps_our_side: str
     simple_practice_line: str
+    source_excerpt: str = ""
+    context_and_method: str = ""
+    limitations: str = ""
 
 
 class VocabularyItem(BaseModel):
@@ -183,23 +186,67 @@ class PracticePlan(BaseModel):
     youtube_learning: List[str] = Field(default_factory=list)
 
 
-class StructuredResult(BaseModel):
-    motion: str
-    side: str
-    speech_time_minutes: int
-    speaker_roles: List[str]
-    language: str
+class CompactContent(BaseModel):
+    summary: str = ""
     motion_understanding: MotionUnderstanding
     definitions: List[DefinitionItem] = Field(default_factory=list)
     overall_case_strategy: OverallCaseStrategy
     attack_defense_map: List[AttackDefenseItem] = Field(default_factory=list)
     cross_fire: CrossFire
-    team_outline: TeamOutline
     first_speaker_speech: SpeechContent
-    my_role_research: List[RoleResearch] = Field(default_factory=list)
     evidence_bank: List[EvidenceItem] = Field(default_factory=list)
-    vocabulary_builder: List[VocabularyItem] = Field(default_factory=list)
-    practice_plan: PracticePlan
+
+
+class StructuredResult(CompactContent):
+    motion: str
+    side: str
+    speech_time_minutes: int
+    speaker_roles: List[str]
+    language: str
+    # Accept historical packs, but never emit removed modules in new responses.
+    team_outline: Optional[TeamOutline] = Field(default=None, exclude=True)
+    my_role_research: List[RoleResearch] = Field(default_factory=list, exclude=True)
+    vocabulary_builder: List[VocabularyItem] = Field(default_factory=list, exclude=True)
+    practice_plan: Optional[PracticePlan] = Field(default=None, exclude=True)
+
+
+PACK_SECTIONS = [
+    "summary", "motion_understanding", "definitions", "evidence_bank",
+    "overall_case_strategy", "attack_defense_map", "cross_fire", "first_speaker_speech",
+]
+
+
+class PackPatch(BaseModel):
+    change_summary: str
+    summary: Optional[str] = None
+    motion_understanding: Optional[MotionUnderstanding] = None
+    definitions: Optional[List[DefinitionItem]] = None
+    evidence_bank: Optional[List[EvidenceItem]] = None
+    overall_case_strategy: Optional[OverallCaseStrategy] = None
+    attack_defense_map: Optional[List[AttackDefenseItem]] = None
+    cross_fire: Optional[CrossFire] = None
+    first_speaker_speech: Optional[SpeechContent] = None
+
+
+class SpeechExportRequest(BaseModel):
+    role: SpeakerRole
+    sections: List[str] = Field(min_length=1, max_length=8)
+    pack: Optional[StructuredResult] = None
+
+    @field_validator("sections")
+    @classmethod
+    def valid_sections(cls, value):
+        if any(section not in PACK_SECTIONS for section in value):
+            raise ValueError("Unknown pack section")
+        return list(dict.fromkeys(value))
+
+
+class DebateSpeech(BaseModel):
+    title: str
+    role: str
+    outline: List[str]
+    speech_text: str
+    evidence_ids: List[str] = Field(default_factory=list)
 
 
 class GenerateResponse(BaseModel):
@@ -207,6 +254,8 @@ class GenerateResponse(BaseModel):
     structured_result: StructuredResult
     markdown_result: str
     research_warnings: List[str] = Field(default_factory=list)
+    changed_sections: List[str] = Field(default_factory=list)
+    change_summary: str = ""
 
 
 class UserProfile(BaseModel):
@@ -295,6 +344,14 @@ class PackDetail(BaseModel):
 
 class AgentUpdateRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20000)
+    sections: List[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("sections")
+    @classmethod
+    def valid_sections(cls, value):
+        if any(section not in PACK_SECTIONS for section in value):
+            raise ValueError("Unknown pack section")
+        return list(dict.fromkeys(value))
 
     @field_validator("message")
     @classmethod

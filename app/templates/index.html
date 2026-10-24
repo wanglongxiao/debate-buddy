@@ -8,9 +8,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}?v=compact-7">
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-    <script src="{{ url_for('static', path='/app.js') }}" defer></script>
+    <script src="{{ url_for('static', path='/word-export.js') }}?v=compact-7" defer></script>
+    <script src="{{ url_for('static', path='/voice-input.js') }}?v=compact-7" defer></script>
+    <script src="{{ url_for('static', path='/app.js') }}?v=compact-7" defer></script>
   </head>
   <body data-webpage-timeout-seconds="{{ webpage_timeout_seconds }}">
     <header class="topbar">
@@ -23,6 +25,7 @@
       </a>
       <div class="topbar-actions">
         <a href="/live" class="topbar-button live-link" style="text-decoration:none">
+          <i data-lucide="mic"></i>
           <span data-i18n="liveDebate">Live debate</span>
         </a>
         <button type="button" id="history-button" class="topbar-button">
@@ -50,6 +53,7 @@
           <label class="field-label" for="motion" data-i18n="motion">Debate motion</label>
           <textarea id="motion" name="motion" rows="4" required minlength="5" maxlength="500"
             placeholder="This House would ban homework in middle schools."></textarea>
+          <div class="voice-tools" data-voice-target="motion"></div>
 
           <fieldset>
             <legend data-i18n="side">Side</legend>
@@ -125,6 +129,7 @@
             <summary><i data-lucide="link"></i><span data-i18n="addSources">Add your own sources</span></summary>
             <label class="field-label" for="source-material" data-i18n="sourceLinks">Text and links</label>
             <textarea id="source-material" rows="5" maxlength="20000" placeholder="Paste notes, claims, source excerpts, public URLs, or a mix of them."></textarea>
+            <div class="voice-tools" data-voice-target="source-material"></div>
             <p class="field-help" data-i18n="onePerLine">Add plain text, public URLs, or both.</p>
           </details>
 
@@ -186,6 +191,9 @@
               <button type="button" id="copy-all" class="secondary-button" title="Copy all">
                 <i data-lucide="copy"></i><span data-i18n="copyAll">Copy all</span>
               </button>
+              <button type="button" id="export-word" class="secondary-button">
+                <i data-lucide="file-text"></i><span data-i18n="exportWord">Word speech</span>
+              </button>
               <button type="button" id="download-markdown" class="secondary-button" title="Download Markdown">
                 <i data-lucide="download"></i><span>Markdown</span>
               </button>
@@ -195,8 +203,10 @@
             </div>
           </div>
           <div id="warning-list" class="warning-list" hidden></div>
-          <nav id="section-nav" class="section-nav" aria-label="Prep pack sections"></nav>
-          <div id="result-sections" class="result-sections"></div>
+          <div class="pack-layout">
+            <nav id="section-nav" class="section-nav" aria-label="Prep pack sections"></nav>
+            <div id="result-sections" class="result-sections"></div>
+          </div>
         </div>
       </section>
     </main>
@@ -240,13 +250,37 @@
         <ul id="agent-resource-list" class="agent-resource-list"></ul>
       </div>
       <p id="agent-status"></p>
+      <details class="refine-history"><summary data-i18n="refineHistory">Update history</summary><div id="refine-history"></div></details>
+      <label class="refine-scope"><span data-i18n="refineScope">Update</span>
+        <select id="refine-scope"><option value="" data-i18n="autoScope">Auto: only necessary sections</option></select>
+      </label>
       <form id="agent-form">
         <textarea id="agent-message" maxlength="20000" required data-i18n-placeholder="agentPlaceholder" placeholder="Add a viewpoint or source, request a change, or ask a question..."></textarea>
         <button id="agent-submit" type="submit" class="agent-send" title="Send" aria-label="Send">
           <i data-lucide="arrow-up"></i>
         </button>
       </form>
+      <div class="voice-tools" data-voice-target="agent-message"></div>
     </aside>
+
+    <dialog id="word-dialog" class="modal">
+      <div class="modal-header">
+        <h2 data-i18n="exportWord">Word speech</h2>
+        <button type="button" class="icon-button modal-close" aria-label="Close">×</button>
+      </div>
+      <form id="word-form" class="auth-form">
+        <label><span data-i18n="myRoles">My speaker role</span><select id="word-role">
+          <option value="1st Speaker" data-i18n="firstSpeaker">1st Speaker</option>
+          <option value="2nd Speaker" data-i18n="secondSpeaker">2nd Speaker</option>
+          <option value="3rd Speaker" data-i18n="thirdSpeaker">3rd Speaker</option>
+          <option value="4th Speaker / Reply Speaker / Summary Speaker" data-i18n="replySpeaker">Reply / Summary</option>
+        </select></label>
+        <p class="field-help" data-i18n="wordHint">Select material for your role speech. Only selected sections will be used.</p>
+        <div id="word-sections" class="word-sections"></div>
+        <p id="word-status" role="status"></p>
+        <button type="submit" id="word-submit" class="generate-button" data-i18n="generateWord">Generate and download Word</button>
+      </form>
+    </dialog>
 
     <dialog id="profile-dialog" class="modal">
       <div class="modal-header">

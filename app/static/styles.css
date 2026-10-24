@@ -1514,3 +1514,78 @@ summary:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Compact packs keep their directory within reach while content scrolls. */
+.result-toolbar { display: block; max-width: 1180px; }
+.result-toolbar h2 { font-size: 26px; }
+.result-toolbar .toolbar-actions { margin-top: 12px; flex-wrap: wrap; gap: 7px; }
+.pack-layout {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 24px;
+  max-width: 1180px;
+  margin: 0 auto;
+  align-items: start;
+}
+.pack-layout .section-nav {
+  position: sticky;
+  top: 88px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: calc(100dvh - 320px);
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  overflow-y: auto;
+}
+.pack-layout .section-nav a { display: flex; align-items: center; gap: 9px; border: 0; white-space: normal; }
+.section-nav a b { font-size: 12px; opacity: .65; }
+.pack-layout .section-nav a.active { color: white; background: var(--green); }
+.pack-layout .result-sections { min-width: 0; width: 100%; }
+.result-section { scroll-margin-top: 90px; }
+.pack-summary { font-size: 18px; font-weight: 700; line-height: 1.65; margin: 0; }
+#section-1 { border-color: var(--green); background: var(--paper); }
+.section-header .copy-section { display: flex; align-items: center; gap: 7px; width: auto; padding: 8px 12px; border: 1px solid var(--green); color: var(--green-dark); font-weight: 700; background: white; }
+#copy-all, #export-word { border-color: var(--green); color: var(--green-dark); font-weight: 700; }
+.evidence-item blockquote { margin: 12px 0; padding: 8px 14px; border-left: 3px solid var(--green); background: var(--paper); font-size: 14px; }
+.evidence-limits { color: var(--warning); }
+.voice-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 12px; }
+.voice-tools button { padding: 6px 9px; border: 1px solid var(--line); border-radius: 5px; background: white; color: var(--green-dark); font-size: 12px; }
+.voice-tools select { width: auto; min-height: 28px; padding: 4px 7px; font-size: 12px; }
+.voice-tools .voice-stop { background: var(--green); color: white; }
+.voice-tools .voice-status { font-size: 12px; color: var(--muted); }
+.voice-tools .voice-preview { flex-basis: 100%; }
+.word-sections { display: grid; gap: 10px; }
+.word-sections label { display: flex; align-items: center; gap: 8px; }
+.word-sections input { width: 18px; min-height: 18px; }
+.refine-scope { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+.refine-scope select { width: auto; min-height: 30px; padding: 4px 9px; font-size: 12px; max-width: 75%; }
+.agent-composer .voice-tools { margin-bottom: 0; }
+.refine-history { font-size: 12px; margin-bottom: 5px; }
+#refine-history { max-height: 100px; overflow-y: auto; }
+.pack-mode .results-panel { padding-bottom: 330px; }
+@media (max-width: 620px) {
+  body:not(.live-page) .topbar { flex-wrap: wrap; gap: 6px; }
+  body:not(.live-page) .topbar-actions { width: 100%; justify-content: flex-end; }
+  .pack-layout { grid-template-columns: 92px minmax(0, 1fr); gap: 8px; }
+  .pack-layout .section-nav { top: 112px; padding: 3px; max-height: calc(100dvh - 350px); }
+  .result-section { scroll-margin-top: 112px; }
+  .pack-layout .section-nav a { padding: 9px 5px; font-size: 11px; gap: 4px; }
+  .pack-layout .section-body { padding: 12px; }
+  .pack-layout .section-header { padding: 8px; flex-wrap: wrap; gap: 5px; }
+  .pack-layout .section-header h3 { font-size: 15px; flex: 1; }
+  .pack-layout .section-number { display: none; }
+  .section-header .copy-section { padding: 5px 7px; font-size: 11px; }
+  .section-header .copy-section svg { display: none; }
+  .result-toolbar h2 { font-size: 23px; }
+  .result-toolbar .toolbar-actions { overflow: visible; }
+  .pack-summary { font-size: 16px; }
+  .pack-mode .results-panel { padding-bottom: 370px; }
+}
+@media print {
+  .pack-layout { display: block; }
+  .agent-composer, .voice-tools { display: none !important; }
+}

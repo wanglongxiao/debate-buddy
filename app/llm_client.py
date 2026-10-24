@@ -35,7 +35,7 @@ class ModelArkClient:
         response_model: type[BaseModel],
         *,
         temperature: float = 0.2,
-        max_tokens: int = 6000,
+        max_tokens: Optional[int] = None,
         system_prompt: Optional[str] = None,
     ) -> BaseModel:
         if not self.settings.llm_ready:
@@ -72,7 +72,7 @@ class ModelArkClient:
                     {"role": "user", "content": full_prompt + retry_note},
                 ],
                 "temperature": temperature if attempt == 0 else 0,
-                "max_tokens": self.settings.llm_max_tokens,
+                "max_tokens": min(max_tokens or self.settings.llm_max_tokens, self.settings.llm_max_tokens),
                 "response_format": {"type": "json_object"},
                 "thinking": {"type": self.settings.llm_thinking_mode},
                 "reasoning_effort": self.settings.llm_reasoning_effort,
@@ -119,7 +119,7 @@ class ModelArkClient:
                     ).get("reasoning_tokens")
                     raise LLMResponseError(
                         "ModelArk truncated the structured response at "
-                        f"{self.settings.llm_max_tokens} tokens"
+                        f"{payload['max_tokens']} tokens"
                         + (
                             f" ({reasoning_tokens} reasoning tokens)."
                             if reasoning_tokens is not None

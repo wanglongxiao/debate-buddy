@@ -21,3 +21,4 @@ app/data/*.db-shm
 app/data/*.db-wal
 dist/
 build/
+node_modules/

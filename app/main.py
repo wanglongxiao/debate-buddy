@@ -29,6 +29,7 @@ from app.models import (
     ProfileUpdateRequest,
     RegisterRequest,
     RulesStatus,
+    SpeechExportRequest,
     UserProfile,
 )
 from app.services.generator import DebateGeneratorService
@@ -322,6 +323,8 @@ async def health() -> dict[str, object]:
         ),
         "app": settings.app_name,
         "llm_configured": settings.llm_ready,
+        "pack_format": "compact-v1",
+        "refine_mode": "section-patch",
         "rules_loaded": rules_skill.status.loaded,
         "history_enabled": generation_repository is not None,
         "storage_ready": storage_ready,
@@ -477,6 +480,7 @@ async def get_history(generation_id: str, request: Request) -> PackDetail:
     pack = await repository.get(user.user_id, generation_id)
     if pack is None:
         raise HTTPException(status_code=404, detail="Debate pack not found or expired.")
+    pack.latest.markdown_result = generator_service.markdown.export(pack.latest.structured_result)
     return pack
 
 
@@ -503,7 +507,7 @@ async def update_history_with_agent(
     if pack is None:
         raise HTTPException(status_code=404, detail="Debate pack not found or expired.")
     try:
-        latest = await generator_service.update_pack(pack, payload.message)
+        latest = await generator_service.update_pack(pack, payload.message, sections=payload.sections)
         updated = await repository.update_latest(
             user.user_id, generation_id, latest, payload.message
         )
@@ -531,7 +535,7 @@ async def update_history_with_agent_stream(
         raise HTTPException(status_code=404, detail="Debate pack not found or expired.")
 
     async def run(progress):
-        latest = await generator_service.update_pack(pack, payload.message, progress)
+        latest = await generator_service.update_pack(pack, payload.message, progress, sections=payload.sections)
         updated = await repository.update_latest(
             user.user_id, generation_id, latest, payload.message
         )
@@ -543,6 +547,46 @@ async def update_history_with_agent_stream(
         return result
 
     return progress_stream(run)
+
+
+@app.post("/api/pack/speech")
+async def export_unsaved_speech(payload: SpeechExportRequest):
+    if payload.pack is None:
+        raise HTTPException(400, "Please provide a pack.")
+    try:
+        return await generator_service.export_speech(payload.pack, payload.role.value, payload.sections)
+    except (LLMConfigurationError, LLMResponseError) as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/api/history/{generation_id}/speech")
+async def export_saved_speech(generation_id: str, payload: SpeechExportRequest, request: Request):
+    repository, user = require_history(request)
+    pack = await repository.get(user.user_id, generation_id)
+    if pack is None:
+        raise HTTPException(404, "Debate pack not found.")
+    try:
+        return await generator_service.export_speech(pack.latest.structured_result, payload.role.value, payload.sections)
+    except (LLMConfigurationError, LLMResponseError) as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/api/audio/transcribe")
+async def transcribe_input(request: Request, language: str = Query("zh", pattern="^(zh|en)$")):
+    from app.services.live import transcribe_audio
+    if not settings.asr_ready:
+        raise HTTPException(503, "ASR is not configured.")
+    audio = bytearray()
+    async for chunk in request.stream():
+        audio.extend(chunk)
+        if len(audio) > 1_000_000:
+            raise HTTPException(413, "Audio is too large; record at most 25 seconds.")
+    if len(audio) < 44 or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
+        raise HTTPException(400, "Please provide WAV audio.")
+    try:
+        return {"text": await transcribe_audio(settings, bytes(audio), language)}
+    except LLMResponseError as exc:
+        raise HTTPException(502, str(exc)) from exc
 
 
 @app.post(
@@ -568,4 +612,5 @@ async def restore_history_version(
     pack = await repository.restore_version(user.user_id, generation_id, version_id)
     if pack is None:
         raise HTTPException(status_code=404, detail="Version not found.")
+    pack.latest.markdown_result = generator_service.markdown.export(pack.latest.structured_result)
     return pack

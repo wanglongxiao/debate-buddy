@@ -189,6 +189,13 @@ class TosGenerationRepository:
                     "created_at": timestamp.isoformat(),
                 }
             )
+            if response.change_summary:
+                pack["messages"].append({
+                    "message_id": uuid.uuid4().hex,
+                    "role": "assistant",
+                    "content": response.change_summary,
+                    "created_at": timestamp.isoformat(),
+                })
 
         return await asyncio.to_thread(
             self._update_pack_sync, user_id, generation_id, update
