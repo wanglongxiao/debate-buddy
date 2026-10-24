@@ -1,6 +1,8 @@
 "use strict";
 const el = (id) => document.getElementById(id);
-const AUDIO_CHUNK_SECONDS = 10;
+const AUDIO_CHUNK_SECONDS = 3;
+const SUMMARY_SECONDS = 10;
+const RECORD_WINDOW = 24;
 const live = {
   session: null, records: [], packs: [], pending: [], processing: false,
   failed: false, listening: false, stopping: false, starting: false,
@@ -9,6 +11,8 @@ const live = {
   speaker: null, advice: "", adviceVersion: 0, questionController: null,
   matchesOffset: 0, ready: false,
   followRecords: true, pane: "records", responseTab: "advice",
+  audioPending: [], recognizing: false, speechBuffer: null, captureId: null,
+  transcriptTail: "", recordEnd: null,
 };
 const sideName = (side) => side === "Proposition" ? "正方" : "反方";
 const roundName = (round) => ({crossfire: "交叉质询", reply: "总结 / Reply"}[round] || `Round ${round}`);
@@ -26,7 +30,7 @@ function error(message) {
 function controls() {
   const capturing = live.listening || live.stopping || live.starting;
   document.body.classList.toggle("live-capturing", capturing);
-  const busy = capturing || live.processing || live.pending.length > 0 || !!live.questionController;
+  const busy = capturing || live.processing || live.pending.length > 0 || live.recognizing || live.audioPending.length > 0 || !!live.questionController;
   for (const id of ["live-speaker", "live-round", "live-speech-language", "live-asr"]) el(id).disabled = capturing;
   for (const id of ["new-match", "resume-match", "live-saved-matches"]) el(id).disabled = busy;
   el("listen-button").disabled = capturing || live.failed || !live.session || el("live-asr").value === "manual";
@@ -38,9 +42,12 @@ function controls() {
   el("listen-status").textContent = capturing
     ? `${sideName(live.speaker.side)} · ${roundName(live.speaker.round)} · ${live.starting ? "正在开启麦克风…" : "监听中"}`
     : "麦克风已关闭";
+  if (live.session && !live.advice) {
+    el("advice-title").textContent = el("live-speaker").value === live.session.side ? "我方续讲" : "对方反驳";
+  }
 }
 function queueStatus(message) {
-  el("queue-status").textContent = message || (live.pending.length ? `${live.pending.length} 段待处理` : `${live.records.length} 条摘要已保存`);
+  el("queue-status").textContent = message || `${live.records.length} 条已保存${live.audioPending.length ? ` · ${live.audioPending.length} 段识别中` : ""}${live.pending.length ? ` · ${live.pending.length} 段待摘要` : ""}`;
   controls();
 }
 async function api(url, options = {}) {
@@ -51,10 +58,10 @@ async function api(url, options = {}) {
   }
   return response.json();
 }
-async function readStream(url, payload, signal, onEvent) {
+async function readStream(url, payload, signal, onEvent, audio = false) {
   const response = await fetch(url, {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(payload), signal,
+    method: "POST", headers: {"Content-Type": audio ? "audio/wav" : "application/json"},
+    body: audio ? payload : JSON.stringify(payload), signal,
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
@@ -112,6 +119,7 @@ function openSession(data) {
   el("live-advice").replaceChildren(node("p", "等待新发言，或在下方提问。", "live-empty"));
   el("copy-advice").disabled = true;
   live.followRecords = true;
+  live.recordEnd = null; live.transcriptTail = ""; live.captureId = null;
   renderRecords(); queueStatus(); error(""); selectPane("records"); selectResponse("advice");
   el("live-answer").replaceChildren(); el("live-answer").hidden = true;
   el("question-status").textContent = "";
@@ -139,9 +147,13 @@ function followLatest() {
 }
 function renderRecords() {
   const list = el("live-records"); list.replaceChildren();
+  const end = live.recordEnd === null ? live.records.length : Math.min(live.recordEnd, live.records.length);
+  const start = Math.max(0, end - RECORD_WINDOW);
   el("record-count").textContent = `${live.records.length} 条摘要`;
+  el("older-records").disabled = start === 0;
+  el("record-range").textContent = live.records.length ? `显示 ${start + 1}–${end} / ${live.records.length} · 全部已保存` : "摘要自动保存";
   if (!live.records.length) list.append(node("p", "等待发言，观点和证据摘要会自动保存在这里。", "live-empty"));
-  live.records.forEach(record => list.append(recordNode(record)));
+  live.records.slice(start, end).forEach(record => list.append(recordNode(record)));
   followLatest();
 }
 function selectResponse(tab) {
@@ -172,20 +184,21 @@ function addRecord(record) {
   if (!live.records.some(r => r.event_id === record.event_id)) {
     live.records.push(record);
     live.records.sort((a, b) => a.captured_at.localeCompare(b.captured_at));
-    const list = el("live-records");
-    list.querySelector(".live-empty")?.remove();
-    const index = live.records.findIndex(r => r.event_id === record.event_id);
-    const next = live.records[index + 1];
-    list.insertBefore(recordNode(record), next ? el(`record-${next.event_id}`) : null);
-    el("record-count").textContent = `${live.records.length} 条摘要`;
-    followLatest();
+    const list = el("live-records"), top = list.scrollTop;
+    if (!live.followRecords && live.recordEnd === null) live.recordEnd = live.records.length - 1;
+    renderRecords();
+    if (!live.followRecords) list.scrollTop = top;
   }
 }
 function showAdvice(advice, label, version, target = "live-advice") {
   if (target === "live-advice" && version !== live.adviceVersion) return;
   const panel = el(target); panel.replaceChildren(); panel.hidden = false;
-  panel.append(node("h3", "可以这样说"), node("div", advice.ready_to_say, "live-ready-line"));
-  if (advice.next_steps.length) panel.append(node("h3", "下一步"), bullets(advice.next_steps));
+  const same = advice.mode === "continue";
+  if (target === "live-advice") el("advice-title").textContent = same ? "我方续讲" : advice.mode === "rebut" ? "对方反驳" : "回应建议";
+  if (advice.key_points?.length) panel.append(node("h3", same ? "接下来展开的重点" : "对方的关键观点 / 证据"), bullets(advice.key_points));
+  if (advice.flaws?.length) panel.append(node("h3", "可能的漏洞 / 证据疑点"), bullets(advice.flaws));
+  panel.append(node("h3", same ? "可以接着说" : "可以这样回应"), node("div", advice.ready_to_say, "live-ready-line"));
+  if (advice.next_steps.length) panel.append(node("h3", same ? "后续发言顺序" : "反驳重点"), bullets(advice.next_steps));
   if (advice.questions.length) panel.append(node("h3", "可以追问"), bullets(advice.questions));
   const cited = advice.cited_record_ids.map(id => live.records.find(r => r.event_id === id)).filter(Boolean);
   if (cited.length) {
@@ -196,6 +209,8 @@ function showAdvice(advice, label, version, target = "live-advice") {
       link.href = `#record-${record.event_id}`;
       link.addEventListener("click", event => {
         event.preventDefault(); live.followRecords = false; selectPane("records");
+        live.recordEnd = live.records.findIndex(r => r.event_id === record.event_id) + 1;
+        renderRecords();
         followLatest();
         requestAnimationFrame(() => {
           const list = el("live-records"), article = el(`record-${record.event_id}`);
@@ -207,7 +222,7 @@ function showAdvice(advice, label, version, target = "live-advice") {
     panel.append(links);
   }
   if (target === "live-advice") {
-    live.advice = [advice.ready_to_say, ...advice.next_steps, ...advice.questions].join("\n\n");
+    live.advice = [...(advice.key_points || []), ...(advice.flaws || []), advice.ready_to_say, ...advice.next_steps, ...advice.questions].join("\n\n");
     el("copy-advice").disabled = false;
     el("advice-status").textContent = label;
   } else el("question-status").textContent = label;
@@ -240,22 +255,12 @@ async function processQueue() {
       const timer = setTimeout(() => controller.abort(), 180000);
       const version = ++live.adviceVersion;
       try {
-        if (job.audio) {
-          queueStatus("正在识别语音…");
-          const result = await api(`/api/live/sessions/${live.session.session_id}/transcribe?language=${job.language}`, {
-            method: "POST", headers: {"Content-Type": "audio/wav"}, body: job.audio, signal: controller.signal,
-          });
-          job.turn.text = result.text;
-          job.audio = null;
-          if (!result.text) { live.pending.shift(); continue; }
-          el("live-transcript").textContent = result.text;
-        }
         await readStream(`/api/live/sessions/${live.session.session_id}/turns`, job.turn, controller.signal, event => {
           if (event.type === "progress") queueStatus(`${event.message} (${live.pending.length} 段)`);
           if (event.type === "summary") {
             saved = true; addRecord(event.record);
             // Full transcript is no longer needed once the summary is durable.
-            if (!live.listening || el("live-transcript").textContent === job.turn.text) {
+            if (!live.listening && !live.recognizing && !live.audioPending.length && el("live-transcript").textContent === job.turn.text) {
               el("live-transcript").textContent = "摘要已保存，原始转写已清除。";
             }
             job.turn.text = "";
@@ -287,7 +292,6 @@ function flushText() {
   if (!text) return;
   const timestamp = live.firstHeard;
   live.finalText = ""; live.firstHeard = null;
-  el("live-transcript").textContent = live.interimText || "发言正在提炼为摘要…";
   for (let start = 0; start < text.length; start += 6000) {
     enqueue({turn: turnFor(text.slice(start, start + 6000), live.speaker, timestamp)});
   }
@@ -310,7 +314,7 @@ function startBrowser() {
       } else interim += text;
     }
     live.interimText = interim;
-    el("live-transcript").textContent = `${live.finalText}${interim}`.slice(-6000);
+    displayTranscript(`${live.finalText}${interim}`);
     if (live.finalText.length >= 600) flushText();
   };
   recognition.onerror = (event) => {
@@ -328,7 +332,7 @@ function startBrowser() {
     }, 250);
   };
   recognition.start();
-  live.flushTimer = setInterval(flushText, AUDIO_CHUNK_SECONDS * 1000);
+  live.flushTimer = setInterval(flushText, SUMMARY_SECONDS * 1000);
 }
 function wav(samples, sourceRate) {
   const rate = 16000, length = Math.floor(samples.length * rate / sourceRate);
@@ -347,6 +351,60 @@ function wav(samples, sourceRate) {
   }
   return new Blob([bytes], {type: "audio/wav"});
 }
+function displayTranscript(text) {
+  const panel = el("live-transcript");
+  const following = panel.scrollHeight - panel.clientHeight - panel.scrollTop < 48;
+  panel.textContent = text.slice(-1200);
+  if (following) panel.scrollTop = panel.scrollHeight;
+}
+function flushSpeechBuffer() {
+  const buffer = live.speechBuffer;
+  live.speechBuffer = null;
+  if (buffer?.text.trim()) enqueue({turn: turnFor(buffer.text.slice(0, 6000), buffer.speaker, buffer.timestamp)});
+}
+function acceptSpeech(job, text) {
+  if (!text) return;
+  if (live.speechBuffer && live.speechBuffer.captureId !== job.captureId) flushSpeechBuffer();
+  if (!live.speechBuffer) live.speechBuffer = {
+    text: "", seconds: 0, captureId: job.captureId, speaker: job.speaker, timestamp: job.timestamp,
+  };
+  live.speechBuffer.text += `${text} `;
+  live.speechBuffer.seconds += job.seconds;
+  if (live.speechBuffer.seconds >= SUMMARY_SECONDS - 1 || live.speechBuffer.text.length >= 600) flushSpeechBuffer();
+}
+async function processAudioQueue() {
+  if (live.recognizing || live.failed || !live.audioPending.length) return;
+  live.recognizing = true; controls();
+  try {
+    while (live.audioPending.length && !live.failed) {
+      const job = live.audioPending[0], controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 60000);
+      let finalText = null;
+      try {
+        await readStream(`/api/live/sessions/${live.session.session_id}/transcribe/stream?language=${job.language}`,
+          job.audio, controller.signal, event => {
+            if (event.type === "error") throw new Error(event.error);
+            if (event.type === "partial" || event.type === "final") {
+              if (job.captureId === live.captureId) displayTranscript(`${live.transcriptTail}${event.text}`);
+              if (event.type === "final") finalText = event.text;
+            }
+          }, true);
+        if (finalText === null) throw new Error("语音识别未完成，请重试。");
+        acceptSpeech(job, finalText);
+        if (job.captureId === live.captureId) live.transcriptTail = `${live.transcriptTail}${finalText} `.slice(-1200);
+        job.audio = null; live.audioPending.shift();
+      } catch (exc) {
+        live.failed = true;
+        error(`${exc.name === "AbortError" ? "语音识别超时" : exc.message} 音频暂留本页，点击重试。`);
+        if (live.listening) await pauseListening();
+      } finally { clearTimeout(timer); }
+    }
+  } finally {
+    live.recognizing = false;
+    if (!live.listening && !live.audioPending.length) flushSpeechBuffer();
+    queueStatus();
+  }
+}
 function flushAudio() {
   if (!live.sampleCount || !live.audio) return;
   const samples = new Float32Array(live.sampleCount);
@@ -356,9 +414,14 @@ function flushAudio() {
   for (const value of samples) energy += value * value;
   if (samples.length < live.audio.context.sampleRate * .15 || Math.sqrt(energy / samples.length) < .001) return;
   const timestamp = new Date(Date.now() - samples.length / live.audio.context.sampleRate * 1000).toISOString();
-  enqueue({audio: wav(samples, live.audio.context.sampleRate), language: el("live-speech-language").value,
-    turn: turnFor("", live.speaker, timestamp)});
-  el("live-transcript").textContent = "语音分段已发送，等待 ASR 识别…";
+  live.audioPending.push({audio: wav(samples, live.audio.context.sampleRate), language: el("live-speech-language").value,
+    speaker: {...live.speaker}, timestamp, captureId: live.captureId, seconds: samples.length / live.audio.context.sampleRate});
+  queueStatus();
+  processAudioQueue();
+  if (live.audioPending.length >= 8 && live.listening) {
+    error("语音识别积压，已暂停。等待处理后继续。");
+    pauseListening().catch(exc => error(exc.message));
+  }
 }
 async function startServer() {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error("麦克风需要 HTTPS 或 localhost。");
@@ -400,7 +463,9 @@ async function startServer() {
 }
 async function startListening() {
   if (!live.session || live.listening || live.starting) return;
-  error(""); live.speaker = speakerNow(); live.starting = true; controls();
+  error(""); live.speaker = speakerNow(); live.captureId = uid(); live.transcriptTail = "";
+  live.finalText = ""; live.interimText = ""; live.firstHeard = null;
+  displayTranscript("正在等待发言…"); live.starting = true; controls();
   try {
     if (!window.isSecureContext) throw new Error("请通过 HTTPS 打开网站以启用麦克风。");
     live.listening = true;
@@ -443,6 +508,7 @@ async function pauseListening() {
       }
       live.interimText = "";
     }
+    if (!live.recognizing && !live.audioPending.length) flushSpeechBuffer();
   } finally { live.stopping = false; controls(); }
 }
 async function ask(message) {
@@ -470,7 +536,7 @@ async function ask(message) {
 function asrHelp() {
   const mode = el("live-asr").value;
   el("asr-help").textContent = mode === "server"
-    ? "服务器 ASR 模型：每约 10 秒识别一段，再提炼摘要。暂停时处理不足 10 秒的末段。双方轮流发言；换人时先暂停再切换。处理积压时会自动暂停。"
+    ? "Seed-Speech 流式识别：约 3 秒发送一段音频，转写逐步更新；摘要约 10 秒合并保存，不阻塞识别。暂停也会保存末段。换人前先暂停再切换。识别语言由模型自动判断；网络会影响延迟。处理积压时自动暂停。"
     : mode === "manual"
       ? "无需麦克风，在下方补录双方发言。先选择正确的发言方和轮次。"
       : "浏览器语音识别（非本站配置的大模型 ASR）。建议使用 Chrome；需要麦克风权限和识别服务网络。换人时先暂停，再切换发言方。";
@@ -484,7 +550,12 @@ async function init() {
   fitViewport();
   window.visualViewport?.addEventListener("resize", fitViewport);
   window.addEventListener("resize", fitViewport);
-  el("follow-records").addEventListener("click", () => { live.followRecords = true; followLatest(); });
+  el("follow-records").addEventListener("click", () => { live.followRecords = true; live.recordEnd = null; renderRecords(); });
+  el("older-records").addEventListener("click", () => {
+    live.followRecords = false;
+    live.recordEnd = Math.max(1, (live.recordEnd ?? live.records.length) - RECORD_WINDOW);
+    renderRecords(); el("live-records").scrollTop = 0;
+  });
   el("live-records").addEventListener("scroll", () => {
     const list = el("live-records");
     if (!list.clientHeight) return;
@@ -559,12 +630,14 @@ async function init() {
   el("listen-button").addEventListener("click", startListening);
   el("pause-button").addEventListener("click", () => pauseListening().catch(exc => error(exc.message)));
   el("live-asr").addEventListener("change", asrHelp);
-  el("retry-turn").addEventListener("click", () => { live.failed = false; error(""); processQueue(); });
+  el("live-speaker").addEventListener("change", () => { live.adviceVersion++; controls(); el("advice-status").textContent = "等待该方新发言；现有建议标注了原发言方。"; });
+  el("retry-turn").addEventListener("click", () => { live.failed = false; error(""); processQueue(); processAudioQueue(); });
   el("live-manual-form").addEventListener("submit", event => {
     event.preventDefault();
     const text = el("manual-turn").value.trim();
     if (!text || live.failed || live.pending.length >= 8) return;
     enqueue({turn: turnFor(text, speakerNow())});
+    displayTranscript(text);
     el("manual-turn").value = "";
     document.querySelector(".live-manual").open = false;
   });
@@ -583,7 +656,7 @@ async function init() {
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
   window.addEventListener("beforeunload", event => {
-    if (live.listening || live.starting || live.stopping || live.pending.length || el("manual-turn").value.trim()) { event.preventDefault(); event.returnValue = ""; }
+    if (live.listening || live.starting || live.stopping || live.pending.length || live.audioPending.length || live.recognizing || live.speechBuffer || el("manual-turn").value.trim()) { event.preventDefault(); event.returnValue = ""; }
   });
   window.addEventListener("pagehide", () => {
     live.listening = false; clearInterval(live.flushTimer); clearTimeout(live.restartTimer);

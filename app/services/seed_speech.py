@@ -79,7 +79,7 @@ def wav_pcm(audio):
         raise ValueError("Invalid WAV") from exc
 
 
-async def transcribe_seed(settings, audio, language):
+async def stream_seed(settings, audio, language, *, streaming=True):
     parts = urlsplit(settings.speech_asr_url)
     if parts.scheme != "wss" or not parts.hostname or parts.username or parts.password:
         raise LLMResponseError("SPEECH_ASR_URL 必须是 WSS 接口。")
@@ -96,9 +96,14 @@ async def transcribe_seed(settings, audio, language):
     if parts.path.endswith("/bigmodel_nostream"):
         request["audio"]["language"] = "en-US" if language == "en" else "zh-CN"
 
+    url = settings.speech_asr_url
+    if streaming:
+        url = url.replace("/bigmodel_nostream", "/bigmodel")
+        request["audio"].pop("language", None)
+
     async def recognize():
         async with connect(
-            settings.speech_asr_url,
+            url,
             additional_headers={
                 "X-Api-Key": settings.speech_api_key,
                 "X-Api-Resource-Id": settings.speech_resource_id,
@@ -119,28 +124,43 @@ async def transcribe_seed(settings, audio, language):
 
             sender = asyncio.create_task(send_audio())
             text = ""
+            deadline = asyncio.get_running_loop().time() + settings.asr_timeout_seconds
             try:
-                async for data in ws:
+                while True:
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    data = await asyncio.wait_for(ws.recv(), timeout=max(.01, remaining))
                     result, final = response_packet(data)
                     status = result.get("code", 0)
                     if status not in (0, 1000, 20000000):
                         raise SpeechProtocolError(status if isinstance(status, int) else 0)
                     recognized = result.get("result", {})
                     if isinstance(recognized, dict) and isinstance(recognized.get("text"), str):
-                        text = recognized["text"]
+                        updated = recognized["text"].strip()[:6000]
+                        if updated != text and not final:
+                            text = updated
+                            yield {"type": "partial", "text": text}
+                        text = updated
                     if final:
                         await sender
-                        return text.strip()[:6000]
-                raise SpeechProtocolError()
+                        yield {"type": "final", "text": text}
+                        return
             finally:
                 sender.cancel()
                 await asyncio.gather(sender, return_exceptions=True)
 
     try:
-        return await asyncio.wait_for(recognize(), timeout=settings.asr_timeout_seconds)
+        async for event in recognize():
+            yield event
     except (WebSocketException, OSError, asyncio.TimeoutError, ValueError) as exc:
         # Record only diagnostic types/status; no credentials, audio or transcript.
         status = getattr(getattr(exc, "response", None), "status_code", None)
         code = getattr(exc, "code", None)
         logger.warning("Seed ASR failed error=%s status=%s code=%s", type(exc).__name__, status, code)
         raise LLMResponseError("Seed-Speech 语音识别失败，请重试或使用文字补录。") from exc
+
+
+async def transcribe_seed(settings, audio, language):
+    text = ""
+    async for event in stream_seed(settings, audio, language, streaming=False):
+        text = event["text"]
+    return text

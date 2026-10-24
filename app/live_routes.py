@@ -44,7 +44,9 @@ def install_live_routes(app, settings, require_storage, get_repository):
             "llm_configured": settings.llm_ready,
             "storage_ready": ready and user is not None,
             "is_guest": user.is_guest if user else True,
-            "audio_chunk_seconds": 10,
+            "audio_chunk_seconds": 3,
+            "summary_interval_seconds": 10,
+            "asr_streaming": settings.asr_ready and settings.effective_asr_provider == "seed",
             "max_audio_bytes": 1_000_000,
         }
 
@@ -101,8 +103,9 @@ def install_live_routes(app, settings, require_storage, get_repository):
                 yield encode("summary", record=record.model_dump(mode="json"))
                 yield encode("progress", message="摘要已保存，正在生成回应…")
                 records = await repository.records(user.user_id, session_id, limit=40)
-                advice = await coach.advise(session, records)
-                yield encode("advice", advice=advice.model_dump(mode="json"), event_id=record.event_id)
+                advice = await coach.advise(session, records, source=record)
+                yield encode("advice", advice=advice.model_dump(mode="json"), event_id=record.event_id,
+                             speaker_side=record.speaker_side.value, round=record.round)
             except (LLMConfigurationError, LLMResponseError):
                 yield encode("error", saved=saved, error=(
                     "摘要已保存，建议生成失败。可在下方重新提问。"
@@ -136,8 +139,7 @@ def install_live_routes(app, settings, require_storage, get_repository):
         return StreamingResponse(stream(), media_type="application/x-ndjson",
                                  headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"})
 
-    @app.post("/api/live/sessions/{session_id}/transcribe")
-    async def transcribe(session_id: str, request: Request, language: str = Query("zh", pattern="^(zh|en)$")):
+    async def read_audio(session_id, request):
         await session_for(request, session_id)
         if not settings.asr_ready:
             raise HTTPException(503, "服务器 ASR 尚未配置。")
@@ -148,7 +150,31 @@ def install_live_routes(app, settings, require_storage, get_repository):
                 raise HTTPException(413, "音频分段过大。")
         if len(audio) < 44 or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
             raise HTTPException(400, "请提供 WAV 音频分段。")
+        return bytes(audio)
+
+    @app.post("/api/live/sessions/{session_id}/transcribe/stream")
+    async def transcribe_stream(session_id: str, request: Request, language: str = Query("zh", pattern="^(zh|en)$")):
+        audio = await read_audio(session_id, request)
+
+        async def stream():
+            try:
+                if settings.effective_asr_provider == "seed":
+                    from app.services.seed_speech import stream_seed
+                    async for event in stream_seed(settings, audio, language):
+                        yield encode(event["type"], text=event["text"])
+                else:
+                    yield encode("final", text=await transcribe_audio(settings, audio, language))
+            except LLMResponseError as exc:
+                yield encode("error", error=str(exc))
+            yield encode("done")
+
+        return StreamingResponse(stream(), media_type="application/x-ndjson",
+                                 headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"})
+
+    @app.post("/api/live/sessions/{session_id}/transcribe")
+    async def transcribe(session_id: str, request: Request, language: str = Query("zh", pattern="^(zh|en)$")):
+        audio = await read_audio(session_id, request)
         try:
-            return {"text": await transcribe_audio(settings, bytes(audio), language)}
+            return {"text": await transcribe_audio(settings, audio, language)}
         except LLMResponseError as exc:
             raise HTTPException(502, str(exc)) from exc

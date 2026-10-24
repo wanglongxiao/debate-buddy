@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Debate 实时分析 · Debate Buddy</title>
   <link rel="stylesheet" href="/static/styles.css">
-  <link rel="stylesheet" href="/static/live.css">
-  <script src="/static/live.js" defer></script>
+  <link rel="stylesheet" href="/static/live.css?v=live-8">
+  <script src="/static/live.js?v=live-8" defer></script>
 </head>
 <body class="live-page">
   <header class="topbar">
@@ -18,7 +18,7 @@
         <div class="live-help-content">
           <ol class="live-tips">
             <li>选择辩题，设置我方立场和发言轮次。</li>
-            <li>选当前发言方，开始监听；换人前先暂停再切换。ASR 每约 10 秒处理一段，暂停时也会处理末段。</li>
+            <li>选当前发言方，开始监听；换人前先暂停再切换。音频约 3 秒发送一段，转写逐步更新，摘要约 10 秒合并保存。</li>
             <li>记录自动跟随最新；向上滚动可回看，点击“跟随最新”恢复。建议和问答在右侧切换，窄屏通过标签切换。</li>
           </ol>
           <p id="asr-help" class="field-help"></p>
@@ -59,22 +59,23 @@
         </div>
         <div class="live-audio-options" id="live-audio-options">
           <label>语音语言<select id="live-speech-language"><option value="zh">普通话</option><option value="en">English</option></select></label>
-          <label>ASR · 10 秒/段<select id="live-asr"><option value="browser">浏览器语音识别</option><option value="server" disabled>服务器 ASR 模型 · 未配置</option><option value="manual">仅文字输入</option></select></label>
+          <label>语音识别<select id="live-asr"><option value="browser">浏览器语音识别</option><option value="server" disabled>服务器 ASR 模型 · 未配置</option><option value="manual">仅文字输入</option></select></label>
         </div>
         <button id="audio-options-toggle" class="secondary-button" aria-label="语音语言与 ASR 设置" aria-controls="live-audio-options" aria-expanded="false">设置</button>
         <div class="live-control-buttons"><button id="listen-button" class="generate-button">开始监听</button><button id="pause-button" class="danger-button" disabled>暂停保存</button></div>
       </section>
 
       <nav class="live-pane-tabs" role="tablist" aria-label="分析内容">
-        <button role="tab" aria-selected="true" aria-controls="records-panel" data-pane="records">比赛记录</button>
+        <button role="tab" aria-selected="true" aria-controls="records-panel" data-pane="records">转写 / 摘要</button>
         <button role="tab" aria-selected="false" aria-controls="advice-panel" data-pane="advice">回应建议</button>
         <button role="tab" aria-selected="false" aria-controls="advice-panel" data-pane="question">问答</button>
       </nav>
       <div class="live-columns" data-view="records">
         <section id="records-panel" class="live-card live-records-panel" aria-labelledby="records-title">
-          <div class="live-card-title"><h2 id="records-title">比赛记录</h2><div class="live-record-actions"><span id="record-count" class="live-badge">0 条摘要</span><button id="follow-records" class="live-follow" aria-pressed="true">跟随最新</button></div></div>
-          <div class="live-transcript"><div class="live-card-title"><strong>即时转写 · 临时</strong><span id="listen-status">麦克风已关闭</span></div><p id="live-transcript">开始监听，或在下方补录发言。</p></div>
+          <div class="live-card-title"><h2 id="records-title">当前发言</h2><div class="live-record-actions"><span id="record-count" class="live-badge">0 条摘要</span><button id="follow-records" class="live-follow" aria-pressed="true">跟随最新</button></div></div>
+          <div class="live-transcript"><div class="live-card-title"><strong>流式转写 · 最近 1,200 字 · 临时</strong><span id="listen-status">麦克风已关闭</span></div><p id="live-transcript" tabindex="0" aria-label="当前发言转写，可滚动回看">开始监听，或在下方补录发言。</p></div>
           <div class="live-queue"><span id="queue-status" role="status">等待发言</span><button id="retry-turn" class="secondary-button" hidden>重试未保存的发言</button></div>
+          <div class="live-summary-heading"><strong>观点 / 证据摘要</strong><span id="record-range">摘要自动保存</span><button id="older-records" class="live-follow" disabled>更早</button></div>
           <div id="live-records" class="live-record-list" tabindex="0" aria-label="比赛摘要，可滚动回看"><p class="live-empty">摘要将按发言方、轮次排列，保留观点、证据及识别疑点。</p></div>
         </section>
         <section id="advice-panel" class="live-card live-advice-panel" aria-label="回应建议与问答">

@@ -50,14 +50,19 @@ speakers, then resume. The microphone hears the room; this does not capture
 system audio or automatically identify speakers. Both sides should speak in
 turn. Overlapping speakers need manual correction.
 
-The page has three areas: setup and listening controls at the top, saved
-summaries and response advice in the middle, and questions/manual notes at the
+The page has three areas: setup and listening controls at the top, current
+speaker transcription on the left and response advice on the right, and questions/manual notes at the
 bottom. During a match the page fits the viewport; records, advice and question
 answers scroll inside their own panes. Records follow the newest turn
 automatically. Scroll up to read history and use **Follow latest** to resume.
 Advice and question answers use separate tabs so new automatic advice does not
 replace a question answer. Narrow screens switch panes with tabs; language/ASR
 settings, help and manual entry expand as overlays.
+The left pane retains at most 1,200 characters of temporary transcription and
+shows 24 saved summaries at a time; **Earlier** pages through older summaries,
+and export includes every saved summary. Same-side speech produces continuation
+priorities; opposing speech produces key claims, possible evidence/reasoning
+gaps and a rebuttal. Advice replaces the previous suggestion and stays concise.
 Summaries are saved before advice is generated. An interrupted turn can
 be retried with the same event ID without creating duplicate records. Microphone
 permission requires HTTPS or localhost.
@@ -74,11 +79,16 @@ There are three recognition modes:
   Alternatively set `ASR_PROVIDER=openai`, `ASR_URL` (full HTTPS
   `/audio/transcriptions` endpoint), `ASR_API_KEY` and `ASR_MODEL` for a compatible
   provider returning `{"text":"..."}`. `auto` prefers Seed when a speech key exists.
-  The browser sends independent mono 16 kHz WAV chunks roughly every ten
-  seconds over HTTP; the Seed adapter streams each chunk upstream over WebSocket,
-  without writing audio to disk. This provides results per chunk, rather than
-  word-by-word interim transcription. Allow the capture interval plus ASR,
-  summary and advice processing time. Pausing also sends the remaining partial
+  The browser sends independent mono 16 kHz WAV chunks roughly every three
+  seconds to `/api/live/sessions/{id}/transcribe/stream`. The Seed adapter uses
+  the `/bigmodel` streaming WebSocket endpoint and returns partial and final
+  transcription as HTTP NDJSON, without writing audio to disk. Pack dictation
+  retains the configured `/bigmodel_nostream` endpoint. Seed streaming detects
+  Chinese/English automatically. Allow the capture interval plus network/ASR
+  time; this is short-chunk streaming, not a continuous browser WebSocket.
+  The compatible OpenAI provider returns final results only.
+  Recognition runs independently of summary/advice; confirmed speech is merged
+  over about ten seconds for concise permanent summaries. Pausing sends the remaining partial
   chunk. Browser recognition flushes finalized text every ten seconds (or sooner
   for long text). The queue pauses capture when it falls behind.
 - **Browser recognition**: available in supported browsers such as Chrome,
@@ -89,7 +99,7 @@ There are three recognition modes:
 
 The current text ModelArk endpoint does not transcribe audio. Server ASR requires
 separate provider credentials; no working ASR connection is assumed when they
-are absent. Live summary/advice calls disable thinking, use at most 1,800 output
+are absent. Live summary/advice calls disable thinking, use at most 1,100 output
 tokens, and have a per-call timeout set by `LIVE_LLM_TIMEOUT_SECONDS` (45 seconds
 by default). Advice uses saved debate records and prepared material, without
 live web verification. Spoken evidence is explicitly marked as unverified.

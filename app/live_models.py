@@ -59,6 +59,9 @@ class TurnSummary(BaseModel):
 
 
 class LiveAdvice(BaseModel):
+    mode: Literal["continue", "rebut", "question", "opening"] = "opening"
+    key_points: List[str] = Field(default_factory=list, max_length=3)
+    flaws: List[str] = Field(default_factory=list, max_length=3)
     ready_to_say: str = Field(max_length=1500)
     next_steps: List[str] = Field(default_factory=list, max_length=5)
     questions: List[str] = Field(default_factory=list, max_length=4)

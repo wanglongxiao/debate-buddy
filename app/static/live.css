@@ -63,10 +63,12 @@
 .live-record-actions { display: flex; gap: 6px; align-items: center; min-width: 0; }
 .live-follow { border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: var(--paper); min-height: 26px !important; padding: 3px 7px !important; font-size: 11px !important; }
 .live-follow[aria-pressed="true"] { color: var(--green-dark); background: var(--green-soft); border-color: var(--green-soft); }
-.live-transcript { flex: none; background: var(--canvas); padding: 8px 10px; border-radius: 6px; font-size: 13px; }
+.live-transcript { flex: 1.2; min-height: 0; display: flex; flex-direction: column; background: var(--canvas); padding: 8px 10px; border-radius: 6px; font-size: 16px; line-height: 1.65; }
 .live-transcript .live-card-title { margin-bottom: 4px; font-size: 10px; color: var(--muted); gap: 6px; }
 #listen-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#live-transcript { max-height: 54px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+#live-transcript { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.live-summary-heading { display: flex; align-items: center; gap: 8px; flex: none; font-size: 11px; color: var(--muted); padding: 4px 0; }
+.live-summary-heading span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .live-queue { flex: none; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); padding: 6px 0; }
 .live-record-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .live-record { padding: 10px 2px; border-top: 1px solid var(--line); overflow-wrap: anywhere; font-size: 14px; }
@@ -152,7 +154,7 @@
   .live-active .live-control-buttons, .live-active #audio-options-toggle { position: static; }
   .live-active .live-speaker-controls { grid-template-columns: minmax(60px,.6fr) minmax(85px,1fr); flex-basis: auto; }
   .live-active .live-transcript { padding: 5px 8px; }
-  #live-transcript { max-height: 30px; }
+  .live-active .live-transcript { font-size: 13px; }
   .live-active .live-card-title { margin-bottom: 5px; }
   .live-active .live-setup-title { margin: 0; }
 }
