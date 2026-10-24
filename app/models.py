@@ -156,6 +156,7 @@ class RoleResearch(BaseModel):
 
 
 class EvidenceItem(BaseModel):
+    aspect: str = ""
     evidence_id: str
     claim: str
     evidence_summary: str
@@ -226,6 +227,14 @@ class PackPatch(BaseModel):
     attack_defense_map: Optional[List[AttackDefenseItem]] = None
     cross_fire: Optional[CrossFire] = None
     first_speaker_speech: Optional[SpeechContent] = None
+
+
+class ResearchPlan(BaseModel):
+    queries: List[str] = Field(min_length=5, max_length=7)
+
+
+class EvidenceExpansion(BaseModel):
+    evidence_bank: List[EvidenceItem] = Field(default_factory=list, max_length=8)
 
 
 class SpeechExportRequest(BaseModel):

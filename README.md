@@ -12,10 +12,14 @@ short arguments, rebuttals, and role-specific Word speeches.
 - **AI-powered deep research** for both sides of a debate motion
 - **Claim and evidence-chain verification** with source URLs, dates, source
   types, credibility labels, and explicit warnings when evidence is uncertain
-- **Compact preparation** with a 45-word quick summary, two core arguments,
-  short responses, three cross-fire questions and enforced length limits
+- **Focused preparation** with a readable quick summary, three developed core
+  arguments, four detailed responses and up to five cross-fire questions.
+  Complete sentences are preserved; content is never cut off with ellipses.
 - **Evidence first** in section 3: source excerpts, study context and method,
   dates, credibility, practical use and explicit limitations
+- **Broader evidence**: aim for 5–8 distinct sourced findings across at least
+  three dimensions, including limitations and opposing evidence. Research uses
+  topic-specific English queries, public web pages and academic sources.
 - **Case generation** with definitions, burdens, main arguments, clash
   analysis and attack-and-defense maps
 - **Individual speaker preparation** for first, second, third, and
@@ -30,7 +34,11 @@ short arguments, rebuttals, and role-specific Word speeches.
 - **360-day persistent history** using SQLite locally or BytePlus TOS in the
   cloud, with search, update sorting, deletion, and automatic expiration
 - **Fast, multi-round refinements** with automatic or explicit section scope;
-  only changed sections are returned and untouched content is preserved
+  each request searches fresh evidence for the new topics, then returns changed
+  sections and preserves untouched content. New/modified words are blue relative
+  to the immediately preceding version; the next update resets the comparison.
+- **Compact reading layout** with a fixed small header and a three-row update
+  dock. Full update details, sources and conversation history open on demand.
 - **Voice input** for motions, source notes and refinements: record up to
   25 seconds, stop to transcribe, edit appended text and submit; failed ASR can
   be retried without recording again

@@ -3,6 +3,7 @@ import ipaddress
 import re
 import socket
 from datetime import datetime, timezone
+from itertools import zip_longest
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlparse
@@ -29,6 +30,10 @@ TRUSTED_DOMAINS = {
     "unicef.org": "International organization",
     "oecd.org": "International organization",
     "worldbank.org": "International organization",
+    "imf.org": "International organization",
+    "sipri.org": "Research institute",
+    "lowyinstitute.org": "Research institute",
+    "stanford.edu": "University or school",
     "reuters.com": "Major news",
     "apnews.com": "Major news",
     "bbc.com": "Major news",
@@ -65,7 +70,7 @@ class WebResearchSkill:
     ) -> tuple[list[SearchResult], list[str]]:
         warnings: list[str] = []
         provider = self._select_provider()
-        query_limit = {"Quick Prep": 2, "Standard Prep": 4, "Deep Research": 7}[
+        query_limit = {"Quick Prep": 5, "Standard Prep": 6, "Deep Research": 7}[
             request.research_depth.value
         ]
         selected_queries = queries[:query_limit]
@@ -97,25 +102,34 @@ class WebResearchSkill:
             if isinstance(academic_batches, Exception):
                 warnings.append("OpenAlex academic search was unavailable.")
             else:
+                successful = []
                 for batch in academic_batches:
                     if isinstance(batch, Exception):
                         warnings.append(
                             f"One OpenAlex search failed: {type(batch).__name__}"
                         )
                     else:
-                        results.extend(batch)
+                        successful.append(batch)
+                results.extend(item for row in zip_longest(*successful) for item in row if item is not None)
 
             if not results:
                 provider = "duckduckgo"
 
         if provider != "google":
             tasks = [self._search(query, provider) for query in selected_queries]
+            # Academic-only search misses current affairs and official data.
+            if provider == "openalex":
+                tasks.extend(self._search_public_web(query) for query in selected_queries)
             batches = await asyncio.gather(*tasks, return_exceptions=True)
+            successful = []
             for batch in batches:
                 if isinstance(batch, Exception):
                     warnings.append(f"One search failed: {type(batch).__name__}")
                 else:
-                    results.extend(batch)
+                    successful.append(batch)
+            # Give every query a place before taking additional hits from one
+            # query, so later requested dimensions survive the source limit.
+            results.extend(item for row in zip_longest(*successful) for item in row if item is not None)
 
         manual_urls = [str(item) for item in request.source_urls]
         manual_urls.extend(
@@ -148,7 +162,7 @@ class WebResearchSkill:
             normalized = result.url.rstrip("/")
             if normalized not in deduped:
                 deduped[normalized] = result
-        source_limit = {"Quick Prep": 6, "Standard Prep": 8, "Deep Research": 12}[
+        source_limit = {"Quick Prep": 12, "Standard Prep": 16, "Deep Research": 20}[
             request.research_depth.value
         ]
         limited_results = self._limit_results(list(deduped.values()), source_limit)
@@ -169,14 +183,28 @@ class WebResearchSkill:
                 "No configured search API was found. DuckDuckGo basic search was used."
             )
         elif provider == "openalex":
-            warnings.append(
-                "No search API key or browser was found. OpenAlex academic search was used."
-            )
+            if not any(s.source_type != "Academic publication" for s in limited_results):
+                warnings.append("Public web search was unavailable; academic sources were used. Recent events may need additional sources.")
         if not limited_results:
             warnings.append(
                 "No web evidence was found. Evidence claims must be treated as unverified."
             )
         return limited_results, warnings
+
+    async def _search_public_web(self, query):
+        results = await self._search_duckduckgo(query)
+        if not results:
+            return []
+        semaphore = asyncio.Semaphore(3)
+
+        async def enrich(result):
+            async with semaphore:
+                try:
+                    fetched = await self._fetch_page(result.url, result.title)
+                    return fetched if fetched.snippet else result
+                except Exception:
+                    return result
+        return await asyncio.gather(*[enrich(r) for r in results])
 
     async def fetch_user_urls(
         self, source_material: str
@@ -568,7 +596,7 @@ class WebResearchSkill:
         return SearchResult(
             title=title or urlparse(final_url).netloc or "Untitled source",
             url=final_url,
-            snippet=" ".join(snippet.split())[:2500],
+            snippet=" ".join(snippet.split())[:6000],
             published_date=published_date,
             accessed_at=datetime.now(timezone.utc),
             source_type=source_type,
@@ -629,8 +657,19 @@ class WebResearchSkill:
             item for item in results if item.source_type == "Academic publication"
         ]
         web = [item for item in results if item.source_type != "Academic publication"]
+        # Round-robin publishers keeps the first query from monopolizing the bank.
+        def varied(items):
+            groups = {}
+            for item in sorted(items, key=lambda r: r.credibility != "High"):
+                groups.setdefault(urlparse(item.url).netloc, []).append(item)
+            ordered = []
+            while any(groups.values()):
+                for group in groups.values():
+                    if group:
+                        ordered.append(group.pop(0))
+            return ordered
         academic_limit = limit // 2
-        selected = [*web[: limit - academic_limit], *academic[:academic_limit]]
+        selected = [*varied(web)[: limit - academic_limit], *academic[:academic_limit]]
         if len(selected) < limit:
             selected_urls = {item.url for item in selected}
             selected.extend(

@@ -2,6 +2,7 @@ const state = {
   uiLanguage: localStorage.getItem("debateBuddyLanguage") || "en",
   markdown: "",
   result: null,
+  previousResult: null,
   loadingTimer: null,
   activeGeneration: null,
   progressEvents: [],
@@ -299,6 +300,10 @@ const sectionKeys = [
 ];
 
 function init() {
+  const headerObserver = new ResizeObserver(entries => {
+    document.documentElement.style.setProperty("--header-height", `${entries[0].target.offsetHeight}px`);
+  });
+  headerObserver.observe($(".topbar"));
   applyLanguage(state.uiLanguage);
   $(".language-switch").addEventListener("click", handleLanguageSwitch);
   $("#debate-form").addEventListener("submit", submitForm);
@@ -327,6 +332,11 @@ function init() {
   });
   $("#history-list").addEventListener("click", handleHistoryAction);
   $("#agent-form").addEventListener("submit", submitAgentMessage);
+  $("#agent-info").addEventListener("click", () => {
+    $("#update-info-text").textContent = $("#agent-status").textContent;
+    $("#update-info-sources").innerHTML = $("#agent-resource-list").innerHTML;
+    $("#update-info-dialog").showModal();
+  });
   $("#save-version").addEventListener("click", saveVersion);
   $("#show-versions").addEventListener("click", openVersions);
   $("#version-list").addEventListener("click", restoreVersion);
@@ -402,6 +412,7 @@ async function submitForm(event) {
       payload,
       controller,
     );
+    state.previousResult = null;
     state.result = body;
     state.markdown = body.markdown_result;
     state.currentPack = body.generation_id
@@ -490,7 +501,7 @@ function renderResult(response, preservePosition = false) {
     renderAttackDefense(result.attack_defense_map),
     renderCrossFire(result.cross_fire),
     renderFirstSpeech(result.first_speaker_speech),
-  ];
+  ].map((body, index) => highlightChanges(body, result, state.previousResult, sectionKeys[index]));
 
   $("#section-nav").innerHTML = labels
     .map((label, index) => `<a href="#section-${index + 1}" data-section="${index + 1}"><b>${index + 1}</b>${esc(label)}</a>`)
@@ -510,6 +521,10 @@ function renderResult(response, preservePosition = false) {
   $$(".result-section").forEach(element => state.sectionObserver.observe(element));
   activateSection(state.selectedSection);
   renderRefineHistory();
+  if (response.change_summary) {
+    $("#agent-status").textContent = response.change_summary;
+    $("#agent-status").title = response.change_summary;
+  }
   document.body.classList.add("has-pack");
   if (window.lucide) window.lucide.createIcons();
   if (!preservePosition) $("#result-state").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -528,6 +543,71 @@ function renderRefineHistory() {
   const messages = state.currentPack?.messages || [];
   $("#refine-history").innerHTML = messages.slice(-12).map(message =>
     `<p><strong>${message.role === "user" ? (state.uiLanguage === "zh" ? "你的要求" : "You") : "Coach"}:</strong> ${esc(message.content)}</p>`).join("");
+}
+
+function highlightChanges(html, result, previous, keys) {
+  if (!previous) return html;
+  const changed = new Map();
+  function walk(current, old) {
+    if (typeof current === "string") {
+      if (current && current !== old) changed.set(current, typeof old === "string" ? old : "");
+    } else if (Array.isArray(current)) {
+      current.forEach((item, i) => {
+        const prior = item?.evidence_id && Array.isArray(old)
+          ? old.find(e => e.evidence_id === item.evidence_id) : old?.[i];
+        walk(item, prior);
+      });
+    } else if (current && typeof current === "object") {
+      Object.entries(current).forEach(([key, value]) => walk(value, old?.[key]));
+    }
+  }
+  keys.forEach(key => walk(result[key], previous[key]));
+  if (!changed.size) return html;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
+  const texts = [];
+  while (walker.nextNode()) texts.push(walker.currentNode);
+  const fields = [...changed].sort((a, b) => b[0].length - a[0].length);
+  for (const textNode of texts) {
+    const text = textNode.textContent;
+    const field = fields.find(([value]) => text.includes(value));
+    if (!field) continue;
+    const [value, old] = field, offset = text.indexOf(value);
+    const holder = document.createElement("span");
+    holder.innerHTML = esc(text.slice(0, offset)) + markInsertedText(old, value) + esc(text.slice(offset + value.length));
+    textNode.replaceWith(...holder.childNodes);
+  }
+  return template.innerHTML;
+}
+
+function markInsertedText(before, after) {
+  const tokens = text => text.match(/[\u3400-\u9fff]|[A-Za-z0-9]+|[^\s]|\s+/g) || [];
+  const a = tokens(before), b = tokens(after), keep = new Set();
+  if (a.length * b.length <= 500000) {
+    const rows = Array.from({length: a.length + 1}, () => new Uint16Array(b.length + 1));
+    for (let i = a.length - 1; i >= 0; i--)
+      for (let j = b.length - 1; j >= 0; j--)
+        rows[i][j] = a[i] === b[j] ? rows[i + 1][j + 1] + 1 : Math.max(rows[i + 1][j], rows[i][j + 1]);
+    let i = 0, j = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { keep.add(j); i++; j++; }
+      else if (rows[i + 1][j] >= rows[i][j + 1]) i++;
+      else j++;
+    }
+  } else {
+    let start = 0, end = 0;
+    while (start < a.length && start < b.length && a[start] === b[start]) keep.add(start++);
+    while (end < a.length - start && end < b.length - start && a[a.length - end - 1] === b[b.length - end - 1]) keep.add(b.length - ++end);
+  }
+  let output = "", pending = "";
+  function flush() {
+    if (pending) output += `<mark class="updated-text" title="${state.uiLanguage === "zh" ? "相对上一版新增或修改" : "Added or changed since previous version"}">${esc(pending)}</mark>`;
+    pending = "";
+  }
+  b.forEach((token, j) => { if (keep.has(j)) { flush(); output += esc(token); } else pending += token; });
+  flush();
+  return output;
 }
 
 function openWordExport() {
@@ -597,6 +677,8 @@ function renderDefinitions(items) {
     <div class="argument-block">
       <h4>${esc(item.term)}</h4>
       <p>${esc(item.recommended_definition)}</p>
+      ${item.why_it_helps ? `<p class="field-help">${esc(item.why_it_helps)}</p>` : ""}
+      ${item.possible_challenge ? `<p class="evidence-limits">${esc(item.possible_challenge)}</p>` : ""}
     </div>`).join("") || "<p>No definitions returned.</p>";
 }
 
@@ -616,7 +698,10 @@ function renderStrategy(data) {
 function renderAttackDefense(items) {
   return items.map(item => `<div class="argument-block">
     <p><strong>They may argue:</strong> ${esc(item.opponent_point)}</p>
-    <p><strong>Respond:</strong> ${esc(item.our_response)}</p></div>`).join("");
+    <p><strong>Respond:</strong> ${esc(item.our_response)}</p>
+    ${item.our_attack_or_risk ? `<p class="evidence-limits">${esc(item.our_attack_or_risk)}</p>` : ""}
+    ${item.practice_line ? `<p class="practice-line">${esc(item.practice_line)}</p>` : ""}
+    </div>`).join("");
 }
 
 function renderCrossFire(data) {
@@ -677,6 +762,7 @@ function renderEvidence(items) {
   }
   return items.map((item) => `
     <div class="evidence-item">
+      ${item.aspect ? `<span class="evidence-aspect">${esc(item.aspect)}</span>` : ""}
       <h4>${esc(item.evidence_id)} · ${esc(item.claim)}
         ${item.credibility === "Needs verification" ? '<span class="status-badge">Needs verification</span>' : ""}
       </h4>
@@ -919,6 +1005,7 @@ function renderProgress(event) {
     $("#agent-progress-step").textContent = label;
     $("#agent-status").textContent =
       `${copy[state.uiLanguage].currentlyWorking}: ${label}`;
+    $("#agent-status").title = $("#agent-status").textContent;
     $("#agent-progress-bar").style.width = `${state.progressPercent}%`;
     renderResourceList($("#agent-resource-list"), null, resources);
   }
@@ -966,6 +1053,7 @@ function lockInterface(locked, kind) {
       });
   } else {
     $("#agent-message").disabled = locked;
+    $("#refine-scope").disabled = locked;
     $("#export-word").disabled = locked;
     $$(".pack-action").forEach((button) => {
       button.disabled = locked;
@@ -1058,6 +1146,7 @@ function showHome() {
   $("#home-view").hidden = false;
   state.currentPack = null;
   state.result = null;
+  state.previousResult = null;
   state.markdown = "";
   document.body.classList.remove("has-pack");
   $("#result-state").hidden = true;
@@ -1126,6 +1215,7 @@ async function openPack(generationId) {
   try {
     const pack = await api(`/api/history/${generationId}`);
     state.currentPack = pack;
+    state.previousResult = null;
     state.result = pack.latest;
     state.markdown = pack.latest.markdown_result;
     $("#history-view").hidden = true;
@@ -1165,11 +1255,15 @@ async function submitAgentMessage(event) {
       controller,
     );
     input.value = "";
+    state.previousResult = state.result.structured_result;
     state.currentPack = pack;
     state.result = pack.latest;
     state.markdown = pack.latest.markdown_result;
     renderResult(pack.latest, true);
   } catch (requestError) {
+    const message = state.activeGeneration?.cancelledByUser
+      ? copy[state.uiLanguage].generationStopped : requestError.message;
+    $("#agent-status").dataset.error = message;
     showToast(
       state.activeGeneration?.cancelledByUser
         ? copy[state.uiLanguage].generationStopped
@@ -1186,12 +1280,14 @@ async function submitAgentMessage(event) {
 function setAgentLoading(isLoading) {
   const button = $("#agent-submit");
   $("#agent-form").classList.toggle("running", isLoading);
+  $("#agent-composer").classList.toggle("composer-running", isLoading);
   lockInterface(isLoading, "agent");
   clearInterval(state.loadingTimer);
   $("#agent-progress").hidden = !isLoading;
   $("#agent-status").textContent = isLoading
     ? copy[state.uiLanguage].agentWorking
-    : state.result?.change_summary || "";
+    : $("#agent-status").dataset.error || state.result?.change_summary || "";
+  $("#agent-status").title = $("#agent-status").textContent;
   if (!isLoading) {
     button.classList.remove("stop-button");
     button.innerHTML = '<i data-lucide="arrow-up"></i>';
@@ -1202,6 +1298,7 @@ function setAgentLoading(isLoading) {
     return;
   }
   state.progressEvents = [];
+  delete $("#agent-status").dataset.error;
   state.progressPercent = 0;
   $("#agent-progress-step").textContent =
     progressStepLabels[state.uiLanguage].reading_pack;
@@ -1261,6 +1358,7 @@ async function restoreVersion(event) {
       { method: "POST" },
     );
     state.currentPack = pack;
+    state.previousResult = null;
     state.result = pack.latest;
     state.markdown = pack.latest.markdown_result;
     $("#versions-dialog").close();

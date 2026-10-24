@@ -26,14 +26,15 @@ class MarkdownExporter:
         lines.extend([motion.plain_meaning, f"**Clash:** {motion.main_clash}",
                       f"**Proposition:** {motion.proposition_burden}",
                       f"**Opposition:** {motion.opposition_burden}"])
-        for item in result.definitions[:2]:
+        for item in result.definitions:
             lines.append(f"- **{item.term}:** {item.recommended_definition}")
         heading(2)
         if not result.evidence_bank:
             lines.append("No sourced evidence available; verify claims before use.")
-        for item in result.evidence_bank[:3]:
+        for item in result.evidence_bank:
             lines.extend([
                 f"### {item.evidence_id}: {item.claim}",
+                f"**Dimension:** {item.aspect}" if item.aspect else "",
                 item.evidence_summary,
                 f"**Source:** [{item.source_title}]({item.source_url})",
                 f"**Date / type:** {item.published_date_or_accessed_at} · {item.source_type} · {item.credibility}",
@@ -51,17 +52,17 @@ class MarkdownExporter:
         heading(3)
         case = result.overall_case_strategy
         lines.append(case.one_sentence_stance)
-        for item in case.main_arguments[:2]:
+        for item in case.main_arguments:
             lines.extend([f"### {item.title}", item.explanation,
                           f"**Evidence:** {item.evidence_direction}",
                           f'**You can say:** "{item.practice_line}"'])
         lines.append(f"**Main risk:** {case.most_vulnerable_argument}")
         heading(4)
-        for item in result.attack_defense_map[:2]:
+        for item in result.attack_defense_map:
             lines.extend([f"**They may argue:** {item.opponent_point}",
                           f"**Respond:** {item.our_response}", ""])
         heading(5)
-        for item in result.cross_fire.questions[:3]:
+        for item in result.cross_fire.questions:
             lines.extend([f"**Ask:** {item.question}",
                           f"**If yes:** {item.follow_up_if_yes}",
                           f"**If no:** {item.follow_up_if_no}", ""])

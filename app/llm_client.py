@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -58,10 +59,13 @@ class ModelArkClient:
 
         last_error: Optional[Exception] = None
         max_attempts = 3
+        token_limit = min(max_tokens or self.settings.llm_max_tokens, self.settings.llm_max_tokens)
+        repair_note = ""
         for attempt in range(max_attempts):
             retry_note = (
                 "\n\nYour previous response was not valid JSON. Carefully check every "
-                "comma, quote, bracket, and required field before returning the object."
+                "comma, quote, bracket, and required field before returning the object. "
+                + repair_note
                 if attempt
                 else ""
             )
@@ -72,7 +76,7 @@ class ModelArkClient:
                     {"role": "user", "content": full_prompt + retry_note},
                 ],
                 "temperature": temperature if attempt == 0 else 0,
-                "max_tokens": min(max_tokens or self.settings.llm_max_tokens, self.settings.llm_max_tokens),
+                "max_tokens": token_limit,
                 "response_format": {"type": "json_object"},
                 "thinking": {"type": self.settings.llm_thinking_mode},
                 "reasoning_effort": self.settings.llm_reasoning_effort,
@@ -102,12 +106,17 @@ class ModelArkClient:
                     attempt + 1,
                 )
             except httpx.HTTPStatusError as exc:
-                detail = exc.response.text[:500]
                 logger.error("ModelArk returned HTTP %s", exc.response.status_code)
+                if exc.response.status_code in (429, 500, 502, 503, 504) and attempt < max_attempts - 1:
+                    await asyncio.sleep(.5 * (attempt + 1))
+                    continue
                 raise LLMResponseError(
-                    f"ModelArk request failed with HTTP {exc.response.status_code}: {detail}"
+                    f"ModelArk request failed with HTTP {exc.response.status_code}. Please retry."
                 ) from exc
             except (httpx.HTTPError, ValueError) as exc:
+                if isinstance(exc, httpx.TransportError) and attempt < max_attempts - 1:
+                    await asyncio.sleep(.5 * (attempt + 1))
+                    continue
                 raise LLMResponseError(f"ModelArk request failed: {exc}") from exc
 
             try:
@@ -117,6 +126,10 @@ class ModelArkClient:
                     reasoning_tokens = usage.get(
                         "completion_tokens_details", {}
                     ).get("reasoning_tokens")
+                    if attempt < max_attempts - 1:
+                        token_limit = min(int(token_limit * 1.5), self.settings.llm_max_tokens)
+                        repair_note = "Previous output hit the token limit. Finish a complete JSON object with complete sentences; reduce repetition."
+                        continue
                     raise LLMResponseError(
                         "ModelArk truncated the structured response at "
                         f"{payload['max_tokens']} tokens"
@@ -137,11 +150,17 @@ class ModelArkClient:
                 json.JSONDecodeError,
             ) as exc:
                 last_error = exc
+                if isinstance(exc, ValidationError):
+                    fields = [".".join(map(str, item["loc"])) + ": " + item["msg"]
+                              for item in exc.errors(include_input=False)[:8]]
+                    repair_note = "Fix these schema fields: " + "; ".join(fields)
+                else:
+                    repair_note = "Return all required fields and valid JSON only."
                 logger.warning(
                     "ModelArk returned invalid structured data (attempt %s/%s): %s",
                     attempt + 1,
                     max_attempts,
-                    exc,
+                    type(exc).__name__,
                 )
 
         raise LLMResponseError(

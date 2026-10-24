@@ -63,7 +63,7 @@
 .live-record-actions { display: flex; gap: 6px; align-items: center; min-width: 0; }
 .live-follow { border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: var(--paper); min-height: 26px !important; padding: 3px 7px !important; font-size: 11px !important; }
 .live-follow[aria-pressed="true"] { color: var(--green-dark); background: var(--green-soft); border-color: var(--green-soft); }
-.live-transcript { flex: 1.2; min-height: 0; display: flex; flex-direction: column; background: var(--canvas); padding: 8px 10px; border-radius: 6px; font-size: 16px; line-height: 1.65; }
+.live-transcript { flex: 1.2; min-height: 0; display: flex; flex-direction: column; background: var(--canvas); padding: 6px 8px; border-radius: 6px; font-size: 14px; line-height: 1.5; }
 .live-transcript .live-card-title { margin-bottom: 4px; font-size: 10px; color: var(--muted); gap: 6px; }
 #listen-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #live-transcript { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
@@ -71,12 +71,12 @@
 .live-summary-heading span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .live-queue { flex: none; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); padding: 6px 0; }
 .live-record-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.live-record { padding: 10px 2px; border-top: 1px solid var(--line); overflow-wrap: anywhere; font-size: 14px; }
+.live-record { padding: 6px 2px; border-top: 1px solid var(--line); overflow-wrap: anywhere; font-size: 12px; }
 .live-record header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 11px; }
 .live-side { border-radius: 4px; padding: 2px 7px; background: var(--green-soft); color: var(--green); font-weight: 700; }
 .live-side.opposition { background: #fdf0e8; color: #9d4c21; }
-.live-record p { margin: 6px 0; }
-.live-record ul { margin: 4px 0 6px; padding-left: 20px; }
+.live-record p { margin: 4px 0; }
+.live-record ul { margin: 3px 0; padding-left: 18px; }
 .live-record .uncertain { color: var(--warning); font-size: 12px; }
 .live-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
 .live-response-tabs { display: flex; align-items: center; gap: 12px; }
@@ -84,9 +84,9 @@
 .live-response-tabs button[aria-selected="true"] { color: var(--green-dark); border-bottom-color: var(--green); }
 .live-response-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .live-single-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
-#live-advice, #live-answer { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere; scrollbar-gutter: stable; font-size: 14px; }
-.live-ready-line { padding: 12px; border-left: 3px solid var(--green); background: var(--green-soft); white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 0 6px 6px 0; font-size: 16px; }
-#live-advice h3, #live-answer h3 { font-size: 13px; margin: 14px 0 6px; }
+#live-advice, #live-answer { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere; scrollbar-gutter: stable; font-size: 13px; }
+.live-ready-line { padding: 8px; border-left: 3px solid var(--green); background: var(--green-soft); white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 0 6px 6px 0; font-size: 14px; }
+#live-advice h3, #live-answer h3 { font-size: 12px; margin: 9px 0 4px; }
 #live-advice h3:first-child, #live-answer h3:first-child { margin-top: 2px; }
 .live-advice-note { flex: none; padding-top: 6px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; margin: 6px 0 0; }
 .live-bottom { position: relative; flex: none; padding: 8px 12px; }
@@ -141,7 +141,7 @@
   .live-record-actions { gap: 3px; }
   .live-card h2 { font-size: 14px; }
   .live-pane-tabs button { min-height: 28px; padding: 4px 8px; }
-  .live-ready-line { font-size: 15px; }
+  .live-ready-line { font-size: 14px; }
   .live-quick-questions button { padding: 3px 6px; font-size: 10px; }
 }
 @media (max-height: 520px) {

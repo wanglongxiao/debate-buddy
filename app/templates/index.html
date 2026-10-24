@@ -8,11 +8,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}?v=compact-7">
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}?v=balanced-11">
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
     <script src="{{ url_for('static', path='/word-export.js') }}?v=compact-7" defer></script>
     <script src="{{ url_for('static', path='/voice-input.js') }}?v=compact-7" defer></script>
-    <script src="{{ url_for('static', path='/app.js') }}?v=compact-7" defer></script>
+    <script src="{{ url_for('static', path='/app.js') }}?v=balanced-11" defer></script>
   </head>
   <body data-webpage-timeout-seconds="{{ webpage_timeout_seconds }}">
     <header class="topbar">
@@ -249,19 +249,27 @@
         <div class="compact-progress-track"><span id="agent-progress-bar"></span></div>
         <ul id="agent-resource-list" class="agent-resource-list"></ul>
       </div>
-      <p id="agent-status"></p>
-      <details class="refine-history"><summary data-i18n="refineHistory">Update history</summary><div id="refine-history"></div></details>
-      <label class="refine-scope"><span data-i18n="refineScope">Update</span>
-        <select id="refine-scope"><option value="" data-i18n="autoScope">Auto: only necessary sections</option></select>
-      </label>
+      <div class="composer-info"><p id="agent-status" role="status"></p><button id="agent-info" type="button" class="composer-info-button" aria-label="Show full update details">ⓘ</button></div>
       <form id="agent-form">
-        <textarea id="agent-message" maxlength="20000" required data-i18n-placeholder="agentPlaceholder" placeholder="Add a viewpoint or source, request a change, or ask a question..."></textarea>
+        <textarea id="agent-message" rows="1" maxlength="20000" required data-i18n-placeholder="agentPlaceholder" placeholder="Add a viewpoint or source, request a change, or ask a question..."></textarea>
         <button id="agent-submit" type="submit" class="agent-send" title="Send" aria-label="Send">
           <i data-lucide="arrow-up"></i>
         </button>
       </form>
-      <div class="voice-tools" data-voice-target="agent-message"></div>
+      <div class="composer-controls">
+        <label class="refine-scope"><span data-i18n="refineScope">Update</span>
+          <select id="refine-scope"><option value="" data-i18n="autoScope">Auto: only necessary sections</option></select>
+        </label>
+        <div class="voice-tools" data-voice-target="agent-message"></div>
+        <details class="refine-history"><summary data-i18n="refineHistory">Update history</summary><div id="refine-history"></div></details>
+      </div>
     </aside>
+
+    <dialog id="update-info-dialog" class="modal">
+      <div class="modal-header"><h2 data-i18n="refineHistory">Update details</h2><button type="button" class="icon-button modal-close" aria-label="Close">×</button></div>
+      <p id="update-info-text"></p>
+      <ul id="update-info-sources"></ul>
+    </dialog>
 
     <dialog id="word-dialog" class="modal">
       <div class="modal-header">
