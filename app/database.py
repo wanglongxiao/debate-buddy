@@ -263,6 +263,25 @@ class GenerationRepository:
                     ON pack_versions(generation_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_messages_pack_created
                     ON pack_messages(generation_id, created_at);
+
+                CREATE TABLE IF NOT EXISTS live_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(user_id),
+                    created_at TEXT NOT NULL,
+                    payload_json TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS live_records (
+                    event_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL REFERENCES live_sessions(session_id),
+                    user_id TEXT NOT NULL REFERENCES users(user_id),
+                    captured_at TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    PRIMARY KEY (session_id, event_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_live_user_created
+                    ON live_sessions(user_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_live_record_session
+                    ON live_records(session_id, captured_at);
                 """
             )
             self._migrate_legacy_generations(connection)
@@ -740,6 +759,7 @@ class GenerationRepository:
                 WHERE is_guest = 1
                   AND user_id NOT IN (SELECT user_id FROM sessions)
                   AND user_id NOT IN (SELECT user_id FROM debate_packs)
+                  AND user_id NOT IN (SELECT user_id FROM live_sessions)
                 """
             )
             return cursor.rowcount

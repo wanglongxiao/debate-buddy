@@ -28,6 +28,17 @@ class Settings(BaseSettings):
     llm_reasoning_effort: Literal["low", "medium", "high"] = "low"
     llm_max_tokens: int = Field(default=120000, ge=1, le=131072)
     webpage_timeout_seconds: int = Field(default=900, ge=1)
+    live_llm_timeout_seconds: float = Field(default=45, ge=5, le=120)
+    asr_provider: Literal["auto", "seed", "openai"] = "auto"
+    speech_appid: Optional[str] = None
+    speech_api_key: Optional[str] = None
+    speech_asr_url: str = "wss://voice.ap-southeast-1.bytepluses.com/api/v3/sauc/bigmodel_nostream"
+    speech_resource_id: str = "volc.seedasr.sauc.duration"
+    # Full OpenAI-compatible /audio/transcriptions URL, separate from the text LLM.
+    asr_url: Optional[str] = None
+    asr_api_key: Optional[str] = None
+    asr_model: str = "gpt-4o-mini-transcribe"
+    asr_timeout_seconds: float = Field(default=20, ge=1, le=60)
 
     search_provider: Literal[
         "auto", "tavily", "serper", "brave", "google", "openalex", "duckduckgo"
@@ -56,6 +67,18 @@ class Settings(BaseSettings):
     @property
     def llm_ready(self) -> bool:
         return bool(self.modelark_api_key and self.main_agent_endpoint)
+
+    @property
+    def asr_ready(self) -> bool:
+        if self.effective_asr_provider == "seed":
+            return bool(self.speech_api_key and self.speech_asr_url)
+        return bool(self.asr_url and self.asr_api_key)
+
+    @property
+    def effective_asr_provider(self) -> str:
+        if self.asr_provider == "auto":
+            return "seed" if self.speech_api_key else "openai"
+        return self.asr_provider
 
     @property
     def tos_ready(self) -> bool:

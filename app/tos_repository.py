@@ -553,6 +553,11 @@ class TosGenerationRepository:
                 active_user_ids.add(pack["user_id"])
         self._delete_keys(expired_pack_keys)
 
+        # Live summaries are permanent; retain the owning guest profile as well.
+        for key in self._list_keys(self._key("live/")):
+            if key.endswith("/session.json"):
+                active_user_ids.add(key[len(self._key("live/")):].split("/")[0])
+
         active_session_users = set()
         expired_session_keys = []
         for key in self._list_keys(self._key("sessions/")):

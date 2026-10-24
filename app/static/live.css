@@ -1,0 +1,64 @@
+.live-workspace { max-width: 1500px; padding: 28px clamp(16px, 3vw, 44px) 48px; margin: auto; }
+.live-heading, .live-card-title { display: flex; gap: 16px; justify-content: space-between; align-items: center; }
+.live-heading h1 { margin: 0; font-size: clamp(24px, 3vw, 32px); }
+.live-heading p { color: var(--muted); margin: 6px 0 16px; }
+.live-heading .eyebrow { color: var(--green); margin: 0 0 4px; }
+.live-link { text-decoration: none; }
+.live-badge { background: var(--green-soft); color: var(--green-dark); padding: 6px 12px; border-radius: 20px; font-size: 13px; white-space: nowrap; }
+.live-badge.listening { background: #fff0ec; color: var(--danger); }
+.live-tips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; list-style: none; padding: 0; margin: 14px 0 22px; }
+.live-tips li { display: flex; gap: 10px; color: var(--muted); font-size: 14px; align-items: flex-start; }
+.live-tips b { flex: 0 0 26px; height: 26px; display: grid; place-items: center; background: var(--green-soft); color: var(--green); border-radius: 50%; }
+.live-card { border: 1px solid var(--line); border-radius: 12px; padding: 22px; background: var(--paper); margin-bottom: 20px; min-width: 0; }
+.live-card h2 { margin: 0 0 14px; font-size: 19px; }
+.live-card-title h2 { margin: 0; }
+.live-card-title { margin-bottom: 16px; }
+.live-setup-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; align-items: end; }
+.live-workspace label { display: block; font-size: 14px; font-weight: 700; min-width: 0; }
+.live-workspace select, .live-workspace input, .live-workspace textarea { width: 100%; margin-top: 6px; min-width: 0; }
+.live-workspace input { min-height: 46px; padding: 8px 11px; }
+.live-workspace .field-help { margin: 10px 0 8px; line-height: 1.6; }
+#live-match-summary strong { display: block; font-size: 20px; overflow-wrap: anywhere; }
+#live-match-role { margin: 8px 0; color: var(--green-dark); font-size: 14px; }
+#live-arena { scroll-margin-top: 88px; }
+.live-motion-field { grid-column: span 2; }
+.live-required { color: var(--danger); }
+.live-workspace button { min-height: 42px; }
+.live-workspace button:disabled { opacity: .5; cursor: not-allowed; }
+.live-resume { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line); padding-top: 12px; flex-wrap: wrap; }
+.live-resume select { flex: 1; width: auto; min-width: 200px; margin: 0; max-width: 700px; }
+.live-speaker-controls { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+.live-control-buttons { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.live-control-buttons .generate-button { width: auto; margin: 0; }
+.live-error { padding: 14px 18px; color: var(--danger); background: #fff0ec; border: 1px solid #f4c7bf; border-radius: 8px; margin: 0 0 20px; }
+.live-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.live-transcript { background: var(--canvas); padding: 14px; border-radius: 8px; font-size: 14px; }
+.live-transcript .live-card-title { margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+#live-transcript { min-height: 44px; max-height: 140px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.live-queue { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); padding: 12px 0; }
+.live-record-list { max-height: 580px; overflow: auto; }
+.live-record { padding: 14px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.live-record header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.live-side { border-radius: 4px; padding: 3px 8px; background: var(--green-soft); color: var(--green); font-weight: 700; }
+.live-side.opposition { background: #fdf0e8; color: #9d4c21; }
+.live-record p { margin: 8px 0; }
+.live-record ul { margin: 4px 0 8px; padding-left: 22px; }
+.live-record .uncertain { color: var(--warning); font-size: 13px; }
+.live-empty { color: var(--muted); font-size: 14px; padding: 14px 0; }
+.live-ready-line { padding: 18px; border-left: 4px solid var(--green); background: var(--green-soft); white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 0 8px 8px 0; font-size: 18px; }
+#live-advice h3, #live-answer h3 { font-size: 15px; margin: 20px 0 8px; }
+#live-answer { overflow-wrap: anywhere; margin-bottom: 16px; }
+#live-advice { max-height: 650px; overflow: auto; overflow-wrap: anywhere; }
+.live-advice-note { padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.live-quick-questions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.live-quick-questions button { background: var(--canvas); color: var(--green-dark); border: 1px solid var(--line); border-radius: 20px; padding: 6px 14px; font-size: 13px; }
+#live-query-form, #live-manual-form { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+#live-query-form label, #live-manual-form label { flex: 1; min-width: 220px; }
+#live-query-form .generate-button { width: auto; margin: 0; }
+.live-manual { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+.live-manual summary { cursor: pointer; font-size: 14px; color: var(--green); }
+#live-manual-form { margin-top: 12px; }
+@media (max-width: 960px) { .live-setup-grid, .live-speaker-controls { grid-template-columns: repeat(2, minmax(0,1fr)); } .live-motion-field { grid-column: auto; } }
+@media (max-width: 700px) { .live-columns { grid-template-columns: 1fr; gap: 0; } .live-tips { grid-template-columns: 1fr; gap: 8px; } .live-card { padding: 16px; } .live-heading { align-items: flex-start; } .live-heading .live-badge { max-width: 140px; white-space: normal; } .live-record-list { max-height: 420px; } }
+@media (max-width: 420px) { .live-setup-grid, .live-speaker-controls { grid-template-columns: 1fr; } .live-resume select { min-width: 0; flex-basis: 100%; } .live-control-buttons button { flex: 1; } }
+@media print { .topbar, .live-tips, #live-setup, .live-resume, .live-controls, .live-bottom, .live-transcript, .live-queue, button { display: none !important; } .live-record-list, #live-advice { max-height: none; overflow: visible; } .live-columns { display: block; } }

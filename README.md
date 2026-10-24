@@ -31,6 +31,69 @@ argument chains, rebuttals, speeches, and practical exercises.
   one-click version restore
 - **Live generation progress** with current stage, source activity, elapsed
   time, input locking, and true request cancellation
+- **Live debate coaching** at `/live`: prepared or new motions, required side
+  and speaking round, speech summaries tagged by side/round, immediate rebuttal
+  suggestions, questions, manual corrections, resume, and JSON summary export.
+
+## Live Debate
+
+Open **Live debate** in the header, or use the button on a preparation pack.
+Choose the motion, your side and your speaking round. Choose the current
+speaker's side and round before listening. **Pause and save** before changing
+speakers, then resume. The microphone hears the room; this does not capture
+system audio or automatically identify speakers. Both sides should speak in
+turn. Overlapping speakers need manual correction.
+
+The page has three areas: setup and listening controls at the top, saved
+summaries and response advice in the middle, and questions/manual notes at the
+bottom. Summaries are saved before advice is generated. An interrupted turn can
+be retried with the same event ID without creating duplicate records. Microphone
+permission requires HTTPS or localhost.
+
+There are three recognition modes:
+
+- **Server ASR model**: set `ASR_PROVIDER=seed`, `SPEECH_API_KEY`,
+  `SPEECH_ASR_URL=wss://voice.ap-southeast-1.bytepluses.com/api/v3/sauc/bigmodel_nostream`
+  and `SPEECH_RESOURCE_ID=volc.seedasr.sauc.duration` for BytePlus Seed-Speech
+  ASR 2.0. The adapter uses the independent speech service's `X-Api-Key`
+  authentication and binary WebSocket protocol; `SPEECH_APPID` is retained for
+  console reference and is not needed by this authentication mode. Account
+  AK/SK and the text model API key are separate credentials.
+  Alternatively set `ASR_PROVIDER=openai`, `ASR_URL` (full HTTPS
+  `/audio/transcriptions` endpoint), `ASR_API_KEY` and `ASR_MODEL` for a compatible
+  provider returning `{"text":"..."}`. `auto` prefers Seed when a speech key exists.
+  The browser sends independent mono 16 kHz WAV chunks roughly every five
+  seconds over HTTP; the Seed adapter streams each chunk upstream over WebSocket,
+  without writing audio to disk. This provides results per chunk, rather than
+  word-by-word interim transcription. Allow the capture interval plus ASR,
+  summary and advice processing time. The queue pauses capture when it falls behind.
+- **Browser recognition**: available in supported browsers such as Chrome,
+  independently of the configured text model. This uses the browser's speech
+  service; it is not the site's configured ASR large model. Network access to
+  that service may be required.
+- **Manual input**: paste or type a speaker's turn when recognition is unavailable.
+
+The current text ModelArk endpoint does not transcribe audio. Server ASR requires
+separate provider credentials; no working ASR connection is assumed when they
+are absent. Live summary/advice calls disable thinking, use at most 1,800 output
+tokens, and have a per-call timeout set by `LIVE_LLM_TIMEOUT_SECONDS` (45 seconds
+by default). Advice uses saved debate records and prepared material, without
+live web verification. Spoken evidence is explicitly marked as unverified.
+
+Only concise speaker-tagged summaries are permanently retained in SQLite
+`live_sessions` / `live_records` or private TOS `<TOS_PREFIX>/live/`. They have
+no application expiration and are separate from the preparation packs' 360-day
+lifecycle. TOS live storage refuses to initialize if a bucket expiration rule
+overlaps this prefix. Guest profiles owning live records are preserved during
+cleanup, but a guest still needs the original session cookie to find them;
+register the guest profile for future account access.
+
+Raw audio and full transcripts are held only in current-page/request memory and
+discarded after processing. Speech providers process the audio according to
+their own policies. Unconfirmed browser interim words are placed in the manual
+correction field when paused. Failed unsaved turns remain in page memory for
+retry. Before leaving, pause and wait for the queue to finish; export saved
+summaries for a local copy. Questions and generated advice are not retained.
 
 ## BytePlus Services
 

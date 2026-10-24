@@ -16,6 +16,7 @@ const state = {
 
 const copy = {
   en: {
+    liveDebate: "Live debate",
     subtitle: "A simple debate research coach for middle school students",
     newPrep: "NEW PREP",
     prepareDebate: "Prepare your debate",
@@ -95,6 +96,7 @@ const copy = {
     ],
   },
   zh: {
+    liveDebate: "Debate 实时分析",
     subtitle: "给中学生使用的简单辩论研究教练",
     newPrep: "新建准备",
     prepareDebate: "准备你的辩论",
@@ -428,6 +430,8 @@ function setLoading(isLoading) {
 
 function renderResult(response) {
   const result = response.structured_result;
+  $("#pack-live-link").href = response.generation_id
+    ? `/live?pack=${encodeURIComponent(response.generation_id)}` : "/live";
   const labels = copy[state.uiLanguage].sections;
   $("#empty-state").hidden = true;
   $("#loading-state").hidden = true;

@@ -16,6 +16,8 @@ from app.database import (
     UsernameExistsError,
 )
 from app.llm_client import LLMConfigurationError, LLMResponseError
+from app.live_repository import LiveRepository
+from app.live_routes import install_live_routes
 from app.models import (
     AgentUpdateRequest,
     GenerateRequest,
@@ -67,6 +69,8 @@ def build_generation_repository():
 
 
 generation_repository = build_generation_repository()
+live_repository = LiveRepository(generation_repository) if generation_repository else None
+live_storage_ready = False
 storage_ready = False
 storage_error: Optional[str] = None
 
@@ -96,13 +100,19 @@ async def periodic_storage_cleanup() -> None:
 
 
 async def initialize_storage() -> bool:
-    global storage_ready, storage_error
+    global storage_ready, storage_error, live_storage_ready
     if generation_repository is None:
         storage_ready = False
         storage_error = None
         return False
     try:
         await generation_repository.initialize()
+        try:
+            await live_repository.initialize()
+            live_storage_ready = True
+        except Exception:
+            live_storage_ready = False
+            logger.exception("Permanent live summary storage initialization failed")
         deleted = await generation_repository.cleanup()
     except Exception as exc:
         mark_storage_unavailable(exc)
@@ -270,6 +280,17 @@ def progress_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+install_live_routes(
+    app, settings, require_history,
+    lambda: (live_repository, live_storage_ready and storage_ready),
+)
+
+
+@app.get("/live", response_class=HTMLResponse)
+async def live_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request=request, name="live.html", context={})
 
 
 @app.get("/", response_class=HTMLResponse)
