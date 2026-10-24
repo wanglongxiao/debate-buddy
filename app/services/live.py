@@ -128,17 +128,22 @@ class LiveCoach:
                 "Return the supplied mode exactly. Keep the whole advice under 650 characters "
                 "(or 180 English words); ready_to_say under 250 characters, each list item "
                 "under 100 characters. At most 3 key_points, 2 flaws, 3 next_steps and 2 questions. "
+                "Put record IDs only in cited_record_ids, never in any visible text field. "
                 + context_rule
             ),
         )
         allowed = {r.event_id for r in recent}
         advice.cited_record_ids = [i for i in advice.cited_record_ids if i in allowed]
+        def compact(text, limit):
+            for record_id in allowed:
+                text = text.replace(record_id, "")
+            return re.sub(r"[（(\[]\s*[)）\]]", "", text).strip()[:limit]
         advice.mode = mode
-        advice.ready_to_say = advice.ready_to_say[:350]
-        advice.key_points = [p[:120] for p in advice.key_points[:3]]
-        advice.flaws = [] if mode == "continue" else [p[:120] for p in advice.flaws[:2]]
-        advice.next_steps = [p[:120] for p in advice.next_steps[:3]]
-        advice.questions = [p[:120] for p in advice.questions[:2]]
+        advice.ready_to_say = compact(advice.ready_to_say, 350)
+        advice.key_points = [compact(p, 120) for p in advice.key_points[:3]]
+        advice.flaws = [] if mode == "continue" else [compact(p, 120) for p in advice.flaws[:2]]
+        advice.next_steps = [compact(p, 120) for p in advice.next_steps[:3]]
+        advice.questions = [compact(p, 120) for p in advice.questions[:2]]
         return advice
 
 

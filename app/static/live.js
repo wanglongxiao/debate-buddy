@@ -469,8 +469,11 @@ async function startListening() {
   try {
     if (!window.isSecureContext) throw new Error("请通过 HTTPS 打开网站以启用麦克风。");
     live.listening = true;
-    if (el("live-asr").value === "server") await startServer();
-    else startBrowser();
+    if (el("live-asr").value === "server") {
+      await startServer();
+      // A short claim followed by silence must also be summarized promptly.
+      live.flushTimer = setInterval(flushSpeechBuffer, SUMMARY_SECONDS * 1000);
+    } else startBrowser();
   } catch (exc) {
     error(exc.message); live.listening = false;
     clearInterval(live.flushTimer); clearTimeout(live.restartTimer);
