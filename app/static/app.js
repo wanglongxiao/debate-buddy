@@ -10,7 +10,9 @@ const state = {
   user: null,
   currentPack: null,
   selectedSection: 1,
-  sectionObserver: null,
+  selectedRole: "",
+  navigationTargets: [],
+  navigationFrame: null,
   historyQueryTimer: null,
   webpageTimeoutSeconds: Number(
     document.body.dataset.webpageTimeoutSeconds || 1800,
@@ -96,6 +98,7 @@ const copy = {
     researching: "Building your prep pack",
     loadingOne: "Reading the motion and finding both sides...",
     prepPack: "PREP PACK",
+    packDirectory: "Pack sections and speaker roles",
     copyAll: "Copy all",
     rolesRequired: "Select at least one speaker role.",
     motionRequired: "Please enter a debate motion.",
@@ -104,9 +107,27 @@ const copy = {
     copied: "Copied to clipboard.",
     downloaded: "Markdown downloaded.",
     sections: [
-      "Quick Summary", "Motion & Definitions", "Evidence Bank",
-      "Core Case", "Attack & Defense", "Cross Fire", "Speaker Roles",
+      "Quick Summary", "Motion & Definitions", "Speaker Roles", "Evidence Bank",
+      "Core Case", "Attack & Defense", "Cross Fire",
     ],
+    roleTitles: ["1st Speaker · Foundation", "2nd Speaker · Rebuttal & extension",
+      "3rd Speaker · Decisive clashes", "Reply / Summary · Clash & weighing"],
+    packLabels: {
+      motionType: "Motion type", baseline: "Baseline", comparisonWorld: "Comparison world",
+      actors: "Actors / incentives", criterion: "Judging criterion", mainClash: "Main clash",
+      burdens: "What each side must prove", stance: "Our stance", argument: "Argument",
+      claim: "Claim", warrant: "Why it follows", impact: "Impact", comparison: "Compare both worlds",
+      evidenceIds: "Evidence IDs", evidenceDirection: "Evidence direction", say: "You can say",
+      mainRisk: "Main risk", theyMayArgue: "They may argue", responseApproach: "Response approach",
+      targetLink: "Link to challenge", respond: "Respond", weighing: "Weighing",
+      ifYes: "If yes", ifNo: "If no", roleFocus: "Role focus", buildsOn: "Builds on",
+      contribution: "Contribution", rebuttals: "Anticipated rebuttals", ourResponse: "Our response",
+      outline: "Speech outline", preparation: "Preparation speech", fact: "Finding",
+      method: "Context / method", limitations: "Limitations", source: "Source", date: "Date",
+      whyHelps: "Why it helps", needsVerification: "Needs verification",
+      noDefinitions: "No definitions returned.",
+      noEvidence: "No sourced evidence available. Treat claims as hypotheses and verify before use.",
+    },
   },
   zh: {
     liveDebate: "Debate 实时分析",
@@ -186,6 +207,7 @@ const copy = {
     researching: "正在生成辩论准备包",
     loadingOne: "正在理解辩题并研究双方观点...",
     prepPack: "辩论准备包",
+    packDirectory: "准备包章节与角色导航",
     copyAll: "复制全部",
     rolesRequired: "请至少选择一个辩位。",
     motionRequired: "请输入辩论题目。",
@@ -194,8 +216,26 @@ const copy = {
     copied: "已复制。",
     downloaded: "Markdown 已下载。",
     sections: [
-      "速读摘要", "辩题与定义", "证据库", "核心论证", "攻防回应", "交叉质询", "各角色准备稿",
+      "速读摘要", "辩题与定义", "各角色准备稿", "证据库", "核心论证", "攻防回应", "交叉质询",
     ],
+    roleTitles: ["一辩 · 建立基础与立论", "二辩 · 反驳与深化论证",
+      "三辩 · 关键争点与反驳", "总结辩 · 争点比较与权衡"],
+    packLabels: {
+      motionType: "辩题类型", baseline: "现状基线", comparisonWorld: "比较世界",
+      actors: "角色与动机", criterion: "评判标准", mainClash: "主要争点",
+      burdens: "双方需要证明什么", stance: "我方立场", argument: "论点",
+      claim: "主张", warrant: "因果机制", impact: "影响", comparison: "双方世界比较",
+      evidenceIds: "证据编号", evidenceDirection: "证据方向", say: "可以这样说",
+      mainRisk: "主要风险", theyMayArgue: "对方可能主张", responseApproach: "回应方式",
+      targetLink: "需要反驳的环节", respond: "回应", weighing: "比较与权衡",
+      ifYes: "如果回答是", ifNo: "如果回答否", roleFocus: "角色重点", buildsOn: "承接前序",
+      contribution: "递进贡献", rebuttals: "预期反驳", ourResponse: "我方回应",
+      outline: "发言提纲", preparation: "角色准备稿", fact: "研究发现",
+      method: "背景与方法", limitations: "局限", source: "来源", date: "日期",
+      whyHelps: "对我方的帮助", needsVerification: "待核实",
+      noDefinitions: "暂无定义。",
+      noEvidence: "暂无有来源的证据。请将相关主张视为假设，核实后再使用。",
+    },
   },
 };
 
@@ -297,9 +337,15 @@ const esc = (value = "") =>
     .replaceAll("'", "&#039;");
 
 const sectionKeys = [
-  ["summary"], ["motion_understanding", "definitions"], ["evidence_bank"],
-  ["overall_case_strategy"], ["attack_defense_map"], ["cross_fire"], ["role_speeches", "first_speaker_speech"],
+  ["summary"], ["motion_understanding", "definitions"], ["role_speeches", "first_speaker_speech"],
+  ["evidence_bank"], ["overall_case_strategy"], ["attack_defense_map"], ["cross_fire"],
 ];
+const speakerRoles = ["1st Speaker", "2nd Speaker", "3rd Speaker",
+  "4th Speaker / Reply Speaker / Summary Speaker"];
+const roleAnchors = ["role-first", "role-second", "role-third", "role-reply"];
+const packLabel = key => esc(copy[state.uiLanguage].packLabels[key]);
+const roleAnchor = role => roleAnchors[speakerRoles.indexOf(role)];
+const roleName = role => copy[state.uiLanguage][["firstSpeaker", "secondSpeaker", "thirdSpeaker", "replySpeaker"][speakerRoles.indexOf(role)]] || role;
 
 function init() {
   const headerObserver = new ResizeObserver(entries => {
@@ -319,9 +365,17 @@ function init() {
     const link = event.target.closest("[data-section]");
     if (!link) return;
     event.preventDefault();
-    activateSection(Number(link.dataset.section));
-    $(`#section-${link.dataset.section}`).scrollIntoView({behavior: "smooth", block: "start"});
+    activateSection(Number(link.dataset.section), link.dataset.roleTarget || "");
+    const target = document.getElementById(link.dataset.roleTarget || `section-${link.dataset.section}`);
+    target?.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start"});
   });
+  window.addEventListener("scroll", () => {
+    if (state.navigationFrame !== null) return;
+    state.navigationFrame = requestAnimationFrame(() => {
+      state.navigationFrame = null;
+      updateSectionFromScroll();
+    });
+  }, {passive: true});
   $("#export-word").addEventListener("click", openWordExport);
   $("#word-form").addEventListener("submit", generateWord);
   $("#history-button").addEventListener("click", showHistory);
@@ -373,6 +427,7 @@ function applyLanguage(language) {
   $$("[data-i18n-placeholder]").forEach((element) => {
     element.placeholder = copy[language][element.dataset.i18nPlaceholder] || "";
   });
+  $("#section-nav").setAttribute("aria-label", copy[language].packDirectory);
   if (state.activeGeneration) renderProgress(state.activeGeneration.lastEvent);
   if (state.result) renderResult(state.result, true);
 }
@@ -488,7 +543,7 @@ function renderResult(response, preservePosition = false) {
   $("#result-state").hidden = false;
   $("#result-motion").textContent = result.motion;
   $("#result-meta").textContent =
-    `${result.side} · ${result.speech_time_minutes} min · ${result.speaker_roles.join(", ")}`;
+    `${copy[state.uiLanguage][result.side === "Proposition" ? "proposition" : "opposition"]} · ${result.speech_time_minutes} ${copy[state.uiLanguage].minutes} · ${result.speaker_roles.map(roleName).join(", ")}`;
 
   const warnings = response.research_warnings || [];
   const warningBox = $("#warning-list");
@@ -498,15 +553,20 @@ function renderResult(response, preservePosition = false) {
   const sections = [
     `<p class="pack-summary">${esc(result.summary || result.overall_case_strategy.one_sentence_stance)}</p>`,
     renderMotion(result.motion_understanding) + renderDefinitions(result.definitions),
+    result.role_speeches?.length ? renderRoleSpeeches(result.role_speeches) : renderFirstSpeech(result.first_speaker_speech),
     renderEvidence(result.evidence_bank),
     renderStrategy(result.overall_case_strategy),
     renderAttackDefense(result.attack_defense_map),
     renderCrossFire(result.cross_fire),
-    result.role_speeches?.length ? renderRoleSpeeches(result.role_speeches) : renderFirstSpeech(result.first_speaker_speech),
   ].map((body, index) => highlightChanges(body, result, state.previousResult, sectionKeys[index]));
 
   $("#section-nav").innerHTML = labels
-    .map((label, index) => `<a href="#section-${index + 1}" data-section="${index + 1}"><b>${index + 1}</b>${esc(label)}</a>`)
+    .map((label, index) => {
+      const roleMenu = sectionKeys[index].includes("role_speeches") && result.role_speeches?.length > 1
+        ? `<ul class="role-submenu">${result.role_speeches.map(item =>
+          `<li><a href="#${roleAnchor(item.role)}" data-section="${index + 1}" data-role-target="${roleAnchor(item.role)}">${esc(roleName(item.role))}</a></li>`).join("")}</ul>` : "";
+      return `<div class="section-nav-group"><a href="#section-${index + 1}" data-section="${index + 1}"><b>${index + 1}</b>${esc(label)}</a>${roleMenu}</div>`;
+    })
     .join("");
   $("#result-sections").innerHTML = sections
     .map((body, index) => section(index + 1, labels[index], body))
@@ -515,13 +575,8 @@ function renderResult(response, preservePosition = false) {
   $("#refine-scope").innerHTML = `<option value="">${esc(copy[state.uiLanguage].autoScope)}</option>` +
     labels.map((label, i) => `<option value="${i}">${esc(label)}</option>`).join("");
   $("#refine-scope").value = scope;
-  state.sectionObserver?.disconnect();
-  state.sectionObserver = new IntersectionObserver(entries => {
-    const visible = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-    if (visible.length) activateSection(Number(visible[0].target.id.split("-")[1]));
-  }, {rootMargin: "-90px 0px -65% 0px"});
-  $$(".result-section").forEach(element => state.sectionObserver.observe(element));
-  activateSection(state.selectedSection);
+  state.navigationTargets = $$(".result-section, .role-preparation");
+  activateSection(state.selectedSection, state.selectedRole);
   renderRefineHistory();
   if (response.change_summary) {
     $("#agent-status").textContent = response.change_summary;
@@ -532,13 +587,28 @@ function renderResult(response, preservePosition = false) {
   if (!preservePosition) $("#result-state").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function activateSection(number) {
+function activateSection(number, role = "") {
   state.selectedSection = number;
+  state.selectedRole = role;
   $$("#section-nav a").forEach(link => {
-    link.classList.toggle("active", Number(link.dataset.section) === number);
-    if (Number(link.dataset.section) === number) link.setAttribute("aria-current", "location");
+    const active = Number(link.dataset.section) === number &&
+      (!link.dataset.roleTarget || link.dataset.roleTarget === role);
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "location");
     else link.removeAttribute("aria-current");
   });
+}
+
+function updateSectionFromScroll() {
+  if (!$("#result-state").getClientRects().length || !state.navigationTargets.length) return;
+  const threshold = $(".topbar").getBoundingClientRect().bottom + 24;
+  let current = state.navigationTargets[0];
+  for (const target of state.navigationTargets) {
+    if (target.getBoundingClientRect().top > threshold) break;
+    current = target;
+  }
+  const parent = current.closest(".result-section");
+  activateSection(Number(parent.id.split("-")[1]), current.classList.contains("role-preparation") ? current.id : "");
 }
 
 function renderRefineHistory() {
@@ -616,7 +686,7 @@ function markInsertedText(before, after) {
 function openWordExport() {
   $("#word-role").value = state.result.structured_result.speaker_roles[0] || "1st Speaker";
   $("#word-sections").innerHTML = copy[state.uiLanguage].sections.map((title, i) =>
-    `<label><input type="checkbox" value="${i}" ${i < 5 ? "checked" : ""}> ${esc(title)}</label>`).join("");
+    `<label><input type="checkbox" value="${i}" ${i < 6 ? "checked" : ""}> ${esc(title)}</label>`).join("");
   $("#word-status").textContent = "";
   $("#word-dialog").showModal();
 }
@@ -635,10 +705,10 @@ async function generateWord(event) {
     const packSnapshot = state.result.structured_result;
     const material = selected.map(i => ({
       title: copy[state.uiLanguage].sections[i],
-      text: (i === 6 && packSnapshot.role_speeches?.length
-        ? [...$$("#section-7 [data-role]")].find(node => node.dataset.role === $("#word-role").value)?.innerText || ""
+      text: (sectionKeys[i].includes("role_speeches") && packSnapshot.role_speeches?.length
+        ? [...$$(".role-preparation")].find(node => node.dataset.role === $("#word-role").value)?.innerText || ""
         : $(`#section-${i + 1} .section-body`).innerText) +
-        (i === 2 ? "\n" + packSnapshot.evidence_bank.map(e => `${e.source_title}: ${e.source_url}`).join("\n") : ""),
+        (sectionKeys[i].includes("evidence_bank") ? "\n" + packSnapshot.evidence_bank.map(e => `${e.source_title}: ${e.source_url}`).join("\n") : ""),
     }));
     const payload = {role: $("#word-role").value, sections: selected.flatMap(i => sectionKeys[i])};
     const url = state.currentPack?.generation_id
@@ -672,14 +742,14 @@ function renderMotion(data) {
   return `
     <p>${esc(data.plain_meaning)}</p>
     ${[
-      ["Motion type", data.motion_type], ["Baseline", data.status_quo],
-      ["Comparison world", data.comparison_world], ["Actors / incentives", data.actor_characterization],
-      ["Judging criterion", data.judging_criterion],
-    ].filter(([, value]) => value).map(([label, value]) => `<p><strong>${label}:</strong> ${esc(value)}</p>`).join("")}
-    <div class="key-line"><strong>Main clash:</strong> ${esc(data.main_clash)}</div>
-    <h4>What each side must prove</h4>
-    <p><strong>Proposition:</strong> ${esc(data.proposition_burden)}</p>
-    <p><strong>Opposition:</strong> ${esc(data.opposition_burden)}</p>`;
+      ["motionType", data.motion_type], ["baseline", data.status_quo],
+      ["comparisonWorld", data.comparison_world], ["actors", data.actor_characterization],
+      ["criterion", data.judging_criterion],
+    ].filter(([, value]) => value).map(([label, value]) => `<p><strong>${packLabel(label)}:</strong> ${esc(value)}</p>`).join("")}
+    <div class="key-line"><strong>${packLabel("mainClash")}:</strong> ${esc(data.main_clash)}</div>
+    <h4>${packLabel("burdens")}</h4>
+    <p><strong>${esc(copy[state.uiLanguage].proposition)}:</strong> ${esc(data.proposition_burden)}</p>
+    <p><strong>${esc(copy[state.uiLanguage].opposition)}:</strong> ${esc(data.opposition_burden)}</p>`;
 }
 
 function renderDefinitions(items) {
@@ -689,34 +759,34 @@ function renderDefinitions(items) {
       <p>${esc(item.recommended_definition)}</p>
       ${item.why_it_helps ? `<p class="field-help">${esc(item.why_it_helps)}</p>` : ""}
       ${item.possible_challenge ? `<p class="evidence-limits">${esc(item.possible_challenge)}</p>` : ""}
-    </div>`).join("") || "<p>No definitions returned.</p>";
+    </div>`).join("") || `<p>${packLabel("noDefinitions")}</p>`;
 }
 
 function renderStrategy(data) {
   return `
-    <div class="key-line"><strong>Our stance:</strong> ${esc(data.one_sentence_stance)}</div>
+    <div class="key-line"><strong>${packLabel("stance")}:</strong> ${esc(data.one_sentence_stance)}</div>
     ${data.main_arguments.map((item, index) => `
       <div class="argument-block">
-        <h4>Argument ${index + 1}: ${esc(item.title)}</h4>
+        <h4>${packLabel("argument")} ${index + 1}: ${esc(item.title)}</h4>
         <p>${esc(item.explanation)}</p>
         ${[
-          ["Claim", item.claim], ["Why it follows", item.warrant],
-          ["Impact", item.impact], ["Compare both worlds", item.comparison],
-        ].filter(([, value]) => value).map(([label, value]) => `<p><strong>${label}:</strong> ${esc(value)}</p>`).join("")}
-        ${item.evidence_ids?.length ? `<p><strong>Evidence IDs:</strong> ${esc(item.evidence_ids.join(", "))}</p>` : ""}
-        <p><strong>Evidence direction:</strong> ${esc(item.evidence_direction)}</p>
-        <p class="practice-line">You can say: “${esc(item.practice_line)}”</p>
+          ["claim", item.claim], ["warrant", item.warrant],
+          ["impact", item.impact], ["comparison", item.comparison],
+        ].filter(([, value]) => value).map(([label, value]) => `<p><strong>${packLabel(label)}:</strong> ${esc(value)}</p>`).join("")}
+        ${item.evidence_ids?.length ? `<p><strong>${packLabel("evidenceIds")}:</strong> ${esc(item.evidence_ids.join(", "))}</p>` : ""}
+        <p><strong>${packLabel("evidenceDirection")}:</strong> ${esc(item.evidence_direction)}</p>
+        <p class="practice-line">${packLabel("say")}: “${esc(item.practice_line)}”</p>
       </div>`).join("")}
-    <p><strong>Main risk:</strong> ${esc(data.most_vulnerable_argument)}</p>`;
+    <p><strong>${packLabel("mainRisk")}:</strong> ${esc(data.most_vulnerable_argument)}</p>`;
 }
 
 function renderAttackDefense(items) {
   return items.map(item => `<div class="argument-block">
-    <p><strong>They may argue:</strong> ${esc(item.opponent_point)}</p>
-    ${item.response_type ? `<p><strong>Response approach:</strong> ${esc(item.response_type)}</p>` : ""}
-    ${item.target_link ? `<p><strong>Link to challenge:</strong> ${esc(item.target_link)}</p>` : ""}
-    <p><strong>Respond:</strong> ${esc(item.our_response)}</p>
-    ${item.weighing ? `<p><strong>Weighing:</strong> ${esc(item.weighing)}</p>` : ""}
+    <p><strong>${packLabel("theyMayArgue")}:</strong> ${esc(item.opponent_point)}</p>
+    ${item.response_type ? `<p><strong>${packLabel("responseApproach")}:</strong> ${esc(item.response_type)}</p>` : ""}
+    ${item.target_link ? `<p><strong>${packLabel("targetLink")}:</strong> ${esc(item.target_link)}</p>` : ""}
+    <p><strong>${packLabel("respond")}:</strong> ${esc(item.our_response)}</p>
+    ${item.weighing ? `<p><strong>${packLabel("weighing")}:</strong> ${esc(item.weighing)}</p>` : ""}
     ${item.our_attack_or_risk ? `<p class="evidence-limits">${esc(item.our_attack_or_risk)}</p>` : ""}
     ${item.practice_line ? `<p class="practice-line">${esc(item.practice_line)}</p>` : ""}
     </div>`).join("");
@@ -727,8 +797,8 @@ function renderCrossFire(data) {
     ${data.questions.map((item, index) => `
       <div class="question-block">
         <h4>${index + 1}. “${esc(item.question)}”</h4>
-        <p><strong>If yes:</strong> ${esc(item.follow_up_if_yes)}</p>
-        <p><strong>If no:</strong> ${esc(item.follow_up_if_no)}</p>
+        <p><strong>${packLabel("ifYes")}:</strong> ${esc(item.follow_up_if_yes)}</p>
+        <p><strong>${packLabel("ifNo")}:</strong> ${esc(item.follow_up_if_no)}</p>
       </div>`).join("")}`;
 }
 
@@ -753,32 +823,25 @@ function renderFirstSpeech(data) {
 }
 
 function renderRoleSpeeches(items) {
-  const zh = state.uiLanguage === "zh";
-  const labels = {
-    "1st Speaker": zh ? "一辩 · 建立基础与立论" : "1st Speaker · Foundation",
-    "2nd Speaker": zh ? "二辩 · 反驳与深化论证" : "2nd Speaker · Rebuttal & extension",
-    "3rd Speaker": zh ? "三辩 · 关键争点与反驳" : "3rd Speaker · Decisive clashes",
-    "4th Speaker / Reply Speaker / Summary Speaker": zh ? "总结辩 · Main clash 与 weighing" : "Reply / Summary · Clash & weighing",
-  };
   return items.map(item => `
-    <div class="role-block" data-role="${esc(item.role)}">
-      <h4>${esc(labels[item.role] || item.role)}</h4>
-      <p><strong>${zh ? "角色重点" : "Role focus"}:</strong> ${esc(item.role_focus)}</p>
-      <p><strong>${zh ? "承接前序" : "Builds on"}:</strong> ${esc(item.builds_on)}</p>
-      <p><strong>${zh ? "递进贡献" : "Contribution"}:</strong> ${esc(item.new_contribution)}</p>
-      ${item.rebuttals.length ? `<h4>${zh ? "预期反驳" : "Anticipated rebuttals"}</h4>${list(item.rebuttals)}` : ""}
+    <div class="role-block role-preparation" id="${roleAnchor(item.role)}" data-role="${esc(item.role)}" data-role-index="${speakerRoles.indexOf(item.role) + 1}">
+      <h4 class="role-title">${esc(copy[state.uiLanguage].roleTitles[speakerRoles.indexOf(item.role)] || item.role)}</h4>
+      <p><strong>${packLabel("roleFocus")}:</strong> ${esc(item.role_focus)}</p>
+      <p><strong>${packLabel("buildsOn")}:</strong> ${esc(item.builds_on)}</p>
+      <p><strong>${packLabel("contribution")}:</strong> ${esc(item.new_contribution)}</p>
+      ${item.rebuttals.length ? `<h4>${packLabel("rebuttals")}</h4>${list(item.rebuttals)}` : ""}
       ${item.main_clashes.map(clash => `
         <div class="argument-block">
-          <h4>Main clash · ${esc(clash.main_clash)}</h4>
-          <p><strong>${zh ? "正方主张" : "Proposition"}:</strong> ${esc(clash.proposition_case)}</p>
-          <p><strong>${zh ? "反方主张" : "Opposition"}:</strong> ${esc(clash.opposition_case)}</p>
-          <p><strong>${zh ? "我方回应" : "Our response"}:</strong> ${esc(clash.our_response)}</p>
-          <p class="key-line"><strong>${zh ? "Weighing · 比较与权衡" : "Weighing"}:</strong> ${esc(clash.weighing)}</p>
+          <h4>${packLabel("mainClash")} · ${esc(clash.main_clash)}</h4>
+          <p><strong>${esc(copy[state.uiLanguage].proposition)}:</strong> ${esc(clash.proposition_case)}</p>
+          <p><strong>${esc(copy[state.uiLanguage].opposition)}:</strong> ${esc(clash.opposition_case)}</p>
+          <p><strong>${packLabel("ourResponse")}:</strong> ${esc(clash.our_response)}</p>
+          <p class="key-line"><strong>${packLabel("weighing")}:</strong> ${esc(clash.weighing)}</p>
         </div>`).join("")}
-      <h4>${zh ? "发言提纲" : "Speech outline"}</h4>${list(item.outline, false, true)}
-      <h4>${zh ? "角色准备稿" : "Preparation speech"}</h4>
+      <h4>${packLabel("outline")}</h4>${list(item.outline, false, true)}
+      <h4>${packLabel("preparation")}</h4>
       <div class="speech-text">${esc(item.speech_text)}</div>
-      ${item.evidence_ids.length ? `<p><strong>${zh ? "引用证据" : "Evidence IDs"}:</strong> ${esc(item.evidence_ids.join(", "))}</p>` : ""}
+      ${item.evidence_ids.length ? `<p><strong>${packLabel("evidenceIds")}:</strong> ${esc(item.evidence_ids.join(", "))}</p>` : ""}
     </div>`).join("");
 }
 
@@ -806,23 +869,23 @@ function renderRoles(items) {
 
 function renderEvidence(items) {
   if (!items.length) {
-    return `<div class="key-line">No verified web evidence was available. Do not present unsupported claims as facts.</div>`;
+    return `<div class="key-line">${packLabel("noEvidence")}</div>`;
   }
   return items.map((item) => `
     <div class="evidence-item">
       ${item.aspect ? `<span class="evidence-aspect">${esc(item.aspect)}</span>` : ""}
       <h4>${esc(item.evidence_id)} · ${esc(item.claim)}
-        ${item.credibility === "Needs verification" ? '<span class="status-badge">Needs verification</span>' : ""}
+        ${item.credibility === "Needs verification" ? `<span class="status-badge">${packLabel("needsVerification")}</span>` : ""}
       </h4>
-      <p><strong>Fact:</strong> ${esc(item.evidence_summary)}</p>
+      <p><strong>${packLabel("fact")}:</strong> ${esc(item.evidence_summary)}</p>
       ${item.source_excerpt ? `<blockquote>${esc(item.source_excerpt)}</blockquote>` : ""}
-      ${item.context_and_method ? `<p><strong>Context / method:</strong> ${esc(item.context_and_method)}</p>` : ""}
-      ${item.limitations ? `<p class="evidence-limits"><strong>Limitations:</strong> ${esc(item.limitations)}</p>` : ""}
-      <p><strong>Source:</strong> <a class="source-link" href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">${esc(item.source_title)}</a></p>
-      <p><strong>Date:</strong> ${esc(item.published_date_or_accessed_at)}</p>
+      ${item.context_and_method ? `<p><strong>${packLabel("method")}:</strong> ${esc(item.context_and_method)}</p>` : ""}
+      ${item.limitations ? `<p class="evidence-limits"><strong>${packLabel("limitations")}:</strong> ${esc(item.limitations)}</p>` : ""}
+      <p><strong>${packLabel("source")}:</strong> <a class="source-link" href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">${esc(item.source_title)}</a></p>
+      <p><strong>${packLabel("date")}:</strong> ${esc(item.published_date_or_accessed_at)}</p>
       <p class="field-help">${esc(item.source_type)} · ${esc(item.credibility)}</p>
-      <p><strong>Why it helps:</strong> ${esc(item.why_it_helps_our_side)}</p>
-      <p class="practice-line">You can say: “${esc(item.simple_practice_line)}”</p>
+      <p><strong>${packLabel("whyHelps")}:</strong> ${esc(item.why_it_helps_our_side)}</p>
+      <p class="practice-line">${packLabel("say")}: “${esc(item.simple_practice_line)}”</p>
     </div>`).join("");
 }
 

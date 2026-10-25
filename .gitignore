@@ -22,3 +22,9 @@ app/data/*.db-wal
 dist/
 build/
 node_modules/
+*.log
+*.pid
+logs/
+debug/
+debug-output/
+.screenshots/

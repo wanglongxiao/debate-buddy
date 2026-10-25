@@ -15,7 +15,8 @@ short arguments, rebuttals, and role-specific Word speeches.
 - **Focused preparation** with a readable quick summary, three developed core
   arguments, four detailed responses and up to five cross-fire questions.
   Complete sentences are preserved; content is never cut off with ellipses.
-- **Evidence first** in section 3: source excerpts, study context and method,
+- **Speaker drafts before evidence** in section 3, followed by the evidence bank
+  in section 4: source excerpts, study context and method,
   dates, credibility, practical use and explicit limitations
 - **Broader evidence**: aim for 5–8 distinct sourced findings across at least
   three dimensions, including limitations and opposing evidence. Research uses
@@ -30,7 +31,15 @@ short arguments, rebuttals, and role-specific Word speeches.
 - **Role-based Word export**: select pack sections and your role to generate
   a timed speech, outline and selected source material in a real `.docx` file
 - **English, Chinese, and bilingual output**
-- **Sticky left directory**, visible copy buttons, Markdown and print-to-PDF export
+- **Two-level left directory**: when multiple roles are selected, each role has
+  a direct link under **Speaker Roles**. The current section and role follow
+  scrolling. Role titles use a larger, bold font and distinct teal, blue,
+  purple and amber colors for first, second, third and reply speakers.
+  Single-role and historical packs remain supported.
+- **Consistent section order** in the page, Markdown, refinement scope and Word
+  material picker. English and Chinese interface labels include motion types,
+  causal mechanisms, burdens, rebuttal targets and weighing.
+- Visible copy buttons, Markdown and print-to-PDF export
 - **Responsive Web UI** for desktop and mobile browsers
 - **Guest and registered profiles** with isolated debate packs and secure
   password hashing
@@ -51,6 +60,32 @@ short arguments, rebuttals, and role-specific Word speeches.
 - **Live debate coaching** at `/live`: prepared or new motions, required side
   and speaking round, speech summaries tagged by side/round, immediate rebuttal
   suggestions, questions, manual corrections, resume, and JSON summary export.
+- **Shared WSD reasoning framework**: classify policy, actor-policy, value,
+  comparison, regret and prediction motions; identify burdens, incentives and
+  comparison worlds; link claims to causal warrants and impacts; distinguish
+  direct rebuttal, mitigation, concession and weighing. Training examples are
+  never factual evidence for a motion.
+
+## 中文使用说明
+
+准备包按以下顺序显示，也用于 Markdown 和 Word 资料选择：
+
+1. 速读摘要
+2. 辩题与定义
+3. 各角色准备稿
+4. 证据库
+5. 核心论证
+6. 攻防回应
+7. 交叉质询
+
+选择多个辩位后，左侧“各角色准备稿”下会出现一辩、二辩、三辩和总结辩的
+二级菜单，仅显示实际选择的角色。点击即可定位到对应准备稿；角色标题用加大、
+加粗字体和不同颜色区分。切换页面右上角的 English / 中文只改变界面文案，
+生成内容的语言由“输出语言”单独决定。
+
+底部更新框支持自动选择相关章节，也可以指定更新范围。Word 导出可选择资料章节
+和目标辩位，多角色准备稿只加入目标角色的内容。实时分析入口位于顶部，
+我方发言显示续讲建议，对方发言显示反驳切入点与争点权衡。
 
 ## Live Debate
 
@@ -110,10 +145,15 @@ There are three recognition modes:
 
 The current text ModelArk endpoint does not transcribe audio. Server ASR requires
 separate provider credentials; no working ASR connection is assumed when they
-are absent. Live summary/advice calls disable thinking, use at most 1,100 output
+are absent. Live summary/advice calls disable thinking, use at most 1,500 output
 tokens, and have a per-call timeout set by `LIVE_LLM_TIMEOUT_SECONDS` (45 seconds
 by default). Advice uses saved debate records and prepared material, without
 live web verification. Spoken evidence is explicitly marked as unverified.
+Summaries separate heard claims, reasons and impacts, and flag missing causal
+links. Advice identifies the clash, response approach and weighing; an optional
+focused check corrects overstated policy projections against evidence limitations.
+POI hints are conditional on being after the first minute and before the last
+minute of an opponent's substantive speech, and are omitted for reply speeches.
 
 Only concise speaker-tagged summaries are permanently retained in SQLite
 `live_sessions` / `live_records` or private TOS `<TOS_PREFIX>/live/`. They have
@@ -147,8 +187,9 @@ summaries for a local copy. Questions and generated advice are not retained.
 3. Choose the speech duration and one or more speaker roles.
 4. Select Quick Prep, Standard Prep, or Deep Research.
 5. Optionally provide notes, source excerpts, public URLs, or a mixture.
-6. Debate Buddy researches the topic and generates the compact pack in one model
-   call while streaming progress, source activity and elapsed time.
+6. Debate Buddy researches the topic, writes the shared pack, then produces a
+   focused set of drafts for every selected role. Progress, source activity and
+   elapsed time stream throughout; short evidence banks may need a supplement.
 7. Use the left directory and copy buttons. Choose **Word speech** to select
    source sections and your role. At the bottom, type or dictate a change and
    choose its section scope. Continue refining over multiple rounds.
@@ -157,11 +198,11 @@ The result includes:
 
 - Quick summary
 - Motion, definitions and both sides' burdens
+- Progressive preparation drafts for every selected role
 - Detailed evidence bank
-- Two core arguments and the main risk
-- Short attack-and-defense responses
+- Three core arguments, causal mechanisms, impact comparison and the main risk
+- Specific attack-and-defense responses and weighing
 - Cross-fire questions and follow-ups
-- Short opening starter
 
 Team outline, role deep research, vocabulary and practice-plan modules are no
 longer generated or displayed. Full timed speeches are generated only on Word
@@ -344,7 +385,13 @@ isolated Guest; registering preserves that Guest's packs. Packs not updated for
 
 ## Debate Rules
 
-The application first reads `app/data/rules_notes.md`. When local notes are not
+The application uses the shared coaching framework in
+`app/services/debate_framework.py` across Pack, role drafts, Word speeches and
+Live advice. Curated notes in `app/data/rules_notes.md` incorporate HMDC training
+and WSDC speaker guidance. Conservative preparation choices for third/reply
+speakers are distinguished from formal tournament rules.
+
+The rules loader first reads `app/data/rules_notes.md`. When local notes are not
 available, it downloads and caches public World Schools Debate reference
 materials. If those sources cannot be reached, it falls back to built-in WSD
 guidance.
@@ -355,7 +402,9 @@ Tournament-specific rules should always take priority.
 
 - The repository excludes `.env`, `uv.lock`, `.venv/`, `__pycache__/`,
   `.pytest_cache/`, `.ruff_cache/`, `.coverage`, `.vefaas/`,
-  `run_vefaas.sh`, `build/`, `dist/`, `docs/`, `tests/`, and `scripts/`.
+  `run_vefaas.sh`, `build/`, `dist/`, `docs/`, and `scripts/`. Diagnostic logs,
+  PID files, screenshot captures and debug-output directories are also ignored.
+  Most local helper tests are ignored; selected regression tests are tracked.
 - BytePlus account AK/SK credentials are stored only in ignored local
   configuration or veFaaS environment variables. They are never included in
   Git commits or deployment archives.
