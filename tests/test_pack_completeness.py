@@ -59,16 +59,21 @@ async def test_selected_roles_complete_ordered_and_retry_missing_role():
     service = DebateGeneratorService(Settings(_env_file=None), None)
     request = GenerateRequest(motion=make_result().motion, side="Proposition",
                               speaker_roles=[SpeakerRole.fourth, SpeakerRole.first, SpeakerRole.second])
+    data = make_result().model_dump(mode="json")
+    previous = role_speech(SpeakerRole.first)
+    previous["role_focus"] = "Keep the user's earlier emphasis on vulnerable students."
+    data["role_speeches"] = [previous]
     calls = []
     async def model(prompt, schema, **kwargs):
         context = json.loads(prompt)
         calls.append(context)
         assert schema == RoleSpeechSet
+        assert context["current_role_speeches"][0]["role_focus"] == previous["role_focus"]
         assert context["selected_roles"] == [SpeakerRole.first.value, SpeakerRole.second.value, SpeakerRole.fourth.value]
         roles = [SpeakerRole.first] if len(calls) == 1 else request.speaker_roles
         return RoleSpeechSet(role_speeches=[role_speech(role) for role in roles])
     service.llm.generate_json = model
-    prepared = await service._role_speeches(request, make_result().model_dump(mode="json"))
+    prepared = await service._role_speeches(request, data)
     assert len(calls) == 2 and "repair" in calls[1]
     assert [item["role"] for item in prepared] == calls[1]["selected_roles"]
     data = make_result().model_dump(mode="json")

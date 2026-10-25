@@ -56,6 +56,11 @@ ROLE_RULES = """
 Write one clearly labeled preparation speech for EACH and ONLY selected role,
 in chronological debate order, regardless of the order selected. Treat this as
 one coherent team case with progression, not four versions of the same opening.
+When current_role_speeches are supplied, preserve their useful role-specific
+content and previous refinements unless the latest request or updated shared
+case/evidence requires a change. Do not reset earlier user edits.
+For a targeted role edit with unchanged shared material, copy the untargeted
+role entries verbatim and develop only the requested role.
 Use only the supplied pack and evidence; never add facts, sources or invented statistics.
 This is preparation, not a record of a real debate: label opposing points as
 anticipated arguments, never claim an opponent has actually said or conceded them.
@@ -345,6 +350,7 @@ and quotes can only come from new_sources. Unsupported user claims stay hypothes
             "motion": request.motion, "side": request.side.value,
             "language": request.language.value, "selected_roles": selected,
             "latest_request": message,
+            "current_role_speeches": data.get("role_speeches", []),
             "pack": {k: data[k] for k in PACK_SECTIONS if k not in ("role_speeches", "first_speaker_speech")},
         }
         for attempt in range(2):
