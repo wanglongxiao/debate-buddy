@@ -5,9 +5,9 @@ class MarkdownExporter:
     def export(self, result: StructuredResult) -> str:
         zh = result.language == "中文"
         titles = (
-            ["速读摘要", "辩题与定义", "证据库", "核心论证", "攻防回应", "交叉质询", "开篇短稿"]
+            ["速读摘要", "辩题与定义", "证据库", "核心论证", "攻防回应", "交叉质询", "各角色准备稿"]
             if zh else ["Quick Summary", "Motion & Definitions", "Evidence Bank",
-                        "Core Case", "Attack & Defense", "Cross Fire", "Speech Starter"]
+                        "Core Case", "Attack & Defense", "Cross Fire", "Speaker Roles"]
         )
         lines = [
             "# Debate Buddy Prep Pack", "",
@@ -67,7 +67,24 @@ class MarkdownExporter:
                           f"**If yes:** {item.follow_up_if_yes}",
                           f"**If no:** {item.follow_up_if_no}", ""])
         heading(6)
-        lines.append(result.first_speaker_speech.speech_text)
+        if not result.role_speeches:
+            lines.append(result.first_speaker_speech.speech_text)
+        for item in result.role_speeches:
+            lines.extend([
+                f"### {item.role.value}", f"**Role focus:** {item.role_focus}",
+                f"**Builds on:** {item.builds_on}", f"**Contribution:** {item.new_contribution}",
+                *[f"- **Anticipated rebuttal:** {text}" for text in item.rebuttals],
+            ])
+            for clash in item.main_clashes:
+                lines.extend([
+                    f"#### Main clash: {clash.main_clash}",
+                    f"**Proposition:** {clash.proposition_case}",
+                    f"**Opposition:** {clash.opposition_case}",
+                    f"**Our response:** {clash.our_response}",
+                    f"**Weighing:** {clash.weighing}",
+                ])
+            lines.extend(["**Speech outline:**", *[f"- {text}" for text in item.outline],
+                          "", item.speech_text, f"**Evidence IDs:** {', '.join(item.evidence_ids)}", ""])
         return "\n".join(lines)
 
     @staticmethod

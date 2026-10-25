@@ -105,7 +105,7 @@ const copy = {
     downloaded: "Markdown downloaded.",
     sections: [
       "Quick Summary", "Motion & Definitions", "Evidence Bank",
-      "Core Case", "Attack & Defense", "Cross Fire", "Speech Starter",
+      "Core Case", "Attack & Defense", "Cross Fire", "Speaker Roles",
     ],
   },
   zh: {
@@ -194,7 +194,7 @@ const copy = {
     copied: "已复制。",
     downloaded: "Markdown 已下载。",
     sections: [
-      "速读摘要", "辩题与定义", "证据库", "核心论证", "攻防回应", "交叉质询", "开篇短稿",
+      "速读摘要", "辩题与定义", "证据库", "核心论证", "攻防回应", "交叉质询", "各角色准备稿",
     ],
   },
 };
@@ -221,6 +221,7 @@ Object.assign(progressStepLabels.en, {
   drafting_arguments: "Drafting arguments and responses",
   checking_case_consistency: "Checking the case for consistency",
   writing_pack: "Writing the compact pack and detailed evidence",
+  writing_role_speeches: "Developing each selected speaker role and clash weighing",
   reasoning_about_cross_fire: "Reasoning about cross-fire questions",
   building_vocabulary: "Building the debate vocabulary",
   planning_speeches: "Planning speeches for the selected roles",
@@ -261,6 +262,7 @@ Object.assign(progressStepLabels.zh, {
   drafting_arguments: "撰写论点、攻击与回应",
   checking_case_consistency: "检查整套论证的一致性",
   writing_pack: "编写紧凑准备包与详细证据",
+  writing_role_speeches: "编写各辩位递进内容与争点权衡",
   reasoning_about_cross_fire: "推理交叉质询问题",
   building_vocabulary: "整理辩论词汇",
   planning_speeches: "规划所选辩位的演讲稿",
@@ -296,7 +298,7 @@ const esc = (value = "") =>
 
 const sectionKeys = [
   ["summary"], ["motion_understanding", "definitions"], ["evidence_bank"],
-  ["overall_case_strategy"], ["attack_defense_map"], ["cross_fire"], ["first_speaker_speech"],
+  ["overall_case_strategy"], ["attack_defense_map"], ["cross_fire"], ["role_speeches", "first_speaker_speech"],
 ];
 
 function init() {
@@ -500,7 +502,7 @@ function renderResult(response, preservePosition = false) {
     renderStrategy(result.overall_case_strategy),
     renderAttackDefense(result.attack_defense_map),
     renderCrossFire(result.cross_fire),
-    renderFirstSpeech(result.first_speaker_speech),
+    result.role_speeches?.length ? renderRoleSpeeches(result.role_speeches) : renderFirstSpeech(result.first_speaker_speech),
   ].map((body, index) => highlightChanges(body, result, state.previousResult, sectionKeys[index]));
 
   $("#section-nav").innerHTML = labels
@@ -553,8 +555,9 @@ function highlightChanges(html, result, previous, keys) {
       if (current && current !== old) changed.set(current, typeof old === "string" ? old : "");
     } else if (Array.isArray(current)) {
       current.forEach((item, i) => {
-        const prior = item?.evidence_id && Array.isArray(old)
-          ? old.find(e => e.evidence_id === item.evidence_id) : old?.[i];
+        const identity = item?.evidence_id ? "evidence_id" : item?.role ? "role" : null;
+        const prior = identity && Array.isArray(old)
+          ? old.find(e => e[identity] === item[identity]) : old?.[i];
         walk(item, prior);
       });
     } else if (current && typeof current === "object") {
@@ -632,7 +635,9 @@ async function generateWord(event) {
     const packSnapshot = state.result.structured_result;
     const material = selected.map(i => ({
       title: copy[state.uiLanguage].sections[i],
-      text: $(`#section-${i + 1} .section-body`).innerText +
+      text: (i === 6 && packSnapshot.role_speeches?.length
+        ? [...$$("#section-7 [data-role]")].find(node => node.dataset.role === $("#word-role").value)?.innerText || ""
+        : $(`#section-${i + 1} .section-body`).innerText) +
         (i === 2 ? "\n" + packSnapshot.evidence_bank.map(e => `${e.source_title}: ${e.source_url}`).join("\n") : ""),
     }));
     const payload = {role: $("#word-role").value, sections: selected.flatMap(i => sectionKeys[i])};
@@ -732,6 +737,36 @@ function renderTeamOutline(data) {
 function renderFirstSpeech(data) {
   return `
     <div class="speech-text">${esc(data.speech_text)}</div>`;
+}
+
+function renderRoleSpeeches(items) {
+  const zh = state.uiLanguage === "zh";
+  const labels = {
+    "1st Speaker": zh ? "一辩 · 建立基础与立论" : "1st Speaker · Foundation",
+    "2nd Speaker": zh ? "二辩 · 反驳与深化论证" : "2nd Speaker · Rebuttal & extension",
+    "3rd Speaker": zh ? "三辩 · 关键争点与反驳" : "3rd Speaker · Decisive clashes",
+    "4th Speaker / Reply Speaker / Summary Speaker": zh ? "总结辩 · Main clash 与 weighing" : "Reply / Summary · Clash & weighing",
+  };
+  return items.map(item => `
+    <div class="role-block" data-role="${esc(item.role)}">
+      <h4>${esc(labels[item.role] || item.role)}</h4>
+      <p><strong>${zh ? "角色重点" : "Role focus"}:</strong> ${esc(item.role_focus)}</p>
+      <p><strong>${zh ? "承接前序" : "Builds on"}:</strong> ${esc(item.builds_on)}</p>
+      <p><strong>${zh ? "递进贡献" : "Contribution"}:</strong> ${esc(item.new_contribution)}</p>
+      ${item.rebuttals.length ? `<h4>${zh ? "预期反驳" : "Anticipated rebuttals"}</h4>${list(item.rebuttals)}` : ""}
+      ${item.main_clashes.map(clash => `
+        <div class="argument-block">
+          <h4>Main clash · ${esc(clash.main_clash)}</h4>
+          <p><strong>${zh ? "正方主张" : "Proposition"}:</strong> ${esc(clash.proposition_case)}</p>
+          <p><strong>${zh ? "反方主张" : "Opposition"}:</strong> ${esc(clash.opposition_case)}</p>
+          <p><strong>${zh ? "我方回应" : "Our response"}:</strong> ${esc(clash.our_response)}</p>
+          <p class="key-line"><strong>${zh ? "Weighing · 比较与权衡" : "Weighing"}:</strong> ${esc(clash.weighing)}</p>
+        </div>`).join("")}
+      <h4>${zh ? "发言提纲" : "Speech outline"}</h4>${list(item.outline, false, true)}
+      <h4>${zh ? "角色准备稿" : "Preparation speech"}</h4>
+      <div class="speech-text">${esc(item.speech_text)}</div>
+      ${item.evidence_ids.length ? `<p><strong>${zh ? "引用证据" : "Evidence IDs"}:</strong> ${esc(item.evidence_ids.join(", "))}</p>` : ""}
+    </div>`).join("");
 }
 
 function renderRoles(items) {

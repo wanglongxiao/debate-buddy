@@ -143,6 +143,30 @@ class SpeechContent(BaseModel):
     speech_text: str
 
 
+class RoleClash(BaseModel):
+    main_clash: str
+    proposition_case: str
+    opposition_case: str
+    our_response: str
+    weighing: str
+
+
+class RoleSpeech(BaseModel):
+    role: SpeakerRole
+    role_focus: str
+    builds_on: str
+    new_contribution: str
+    rebuttals: List[str] = Field(default_factory=list)
+    main_clashes: List[RoleClash] = Field(min_length=1, max_length=3)
+    outline: List[str] = Field(min_length=1, max_length=6)
+    speech_text: str = Field(min_length=80)
+    evidence_ids: List[str] = Field(default_factory=list)
+
+
+class RoleSpeechSet(BaseModel):
+    role_speeches: List[RoleSpeech] = Field(min_length=1, max_length=4)
+
+
 class RoleResearch(BaseModel):
     role: str
     role_tasks: List[str] = Field(default_factory=list)
@@ -195,6 +219,7 @@ class CompactContent(BaseModel):
     attack_defense_map: List[AttackDefenseItem] = Field(default_factory=list)
     cross_fire: CrossFire
     first_speaker_speech: SpeechContent
+    role_speeches: List[RoleSpeech] = Field(default_factory=list)
     evidence_bank: List[EvidenceItem] = Field(default_factory=list)
 
 
@@ -213,7 +238,7 @@ class StructuredResult(CompactContent):
 
 PACK_SECTIONS = [
     "summary", "motion_understanding", "definitions", "evidence_bank",
-    "overall_case_strategy", "attack_defense_map", "cross_fire", "first_speaker_speech",
+    "overall_case_strategy", "attack_defense_map", "cross_fire", "first_speaker_speech", "role_speeches",
 ]
 
 
@@ -227,6 +252,7 @@ class PackPatch(BaseModel):
     attack_defense_map: Optional[List[AttackDefenseItem]] = None
     cross_fire: Optional[CrossFire] = None
     first_speaker_speech: Optional[SpeechContent] = None
+    role_speeches: Optional[List[RoleSpeech]] = None
 
 
 class ResearchPlan(BaseModel):
@@ -239,7 +265,7 @@ class EvidenceExpansion(BaseModel):
 
 class SpeechExportRequest(BaseModel):
     role: SpeakerRole
-    sections: List[str] = Field(min_length=1, max_length=8)
+    sections: List[str] = Field(min_length=1, max_length=9)
     pack: Optional[StructuredResult] = None
 
     @field_validator("sections")
@@ -353,7 +379,7 @@ class PackDetail(BaseModel):
 
 class AgentUpdateRequest(BaseModel):
     message: str = Field(min_length=1, max_length=20000)
-    sections: List[str] = Field(default_factory=list, max_length=8)
+    sections: List[str] = Field(default_factory=list, max_length=9)
 
     @field_validator("sections")
     @classmethod

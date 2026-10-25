@@ -1,9 +1,14 @@
 import json
+from datetime import datetime, timedelta
 
 import pytest
 
 from app.config import Settings
-from app.models import EvidenceExpansion, GenerateRequest, SearchResult, StructuredResult
+from app.models import (
+    DebateSpeech, EvidenceExpansion, GenerateRequest, GenerateResponse, PackDetail,
+    PackPatch, ResearchPlan, RoleSpeechSet, SearchResult, SpeakerRole,
+    SpeechExportRequest, StructuredResult, PACK_SECTIONS,
+)
 from app.services.generator import DebateGeneratorService, compact_content
 from app.services.markdown_exporter import MarkdownExporter
 
@@ -31,6 +36,100 @@ def make_result():
             "simple_practice_line": "Protect rest time.",
         }],
     })
+
+
+def role_speech(role):
+    return {
+        "role": role, "role_focus": "Compare the strongest cases.",
+        "builds_on": "Use the established team case.", "new_contribution": "Weigh likelihood and impact.",
+        "rebuttals": ["An anticipated objection needs proof."],
+        "main_clashes": [{
+            "main_clash": "Learning versus rest", "proposition_case": "Rest improves learning.",
+            "opposition_case": "Practice needs time.", "our_response": "Compare effective practice.",
+            "weighing": "Probability and magnitude favor protected rest.",
+        }],
+        "outline": ["Explain the clash.", "Weigh outcomes."],
+        "speech_text": "Compare learning benefits with the cost of lost rest. " * 20,
+        "evidence_ids": ["E1"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_selected_roles_complete_ordered_and_retry_missing_role():
+    service = DebateGeneratorService(Settings(_env_file=None), None)
+    request = GenerateRequest(motion=make_result().motion, side="Proposition",
+                              speaker_roles=[SpeakerRole.fourth, SpeakerRole.first, SpeakerRole.second])
+    calls = []
+    async def model(prompt, schema, **kwargs):
+        context = json.loads(prompt)
+        calls.append(context)
+        assert schema == RoleSpeechSet
+        assert context["selected_roles"] == [SpeakerRole.first.value, SpeakerRole.second.value, SpeakerRole.fourth.value]
+        roles = [SpeakerRole.first] if len(calls) == 1 else request.speaker_roles
+        return RoleSpeechSet(role_speeches=[role_speech(role) for role in roles])
+    service.llm.generate_json = model
+    prepared = await service._role_speeches(request, make_result().model_dump(mode="json"))
+    assert len(calls) == 2 and "repair" in calls[1]
+    assert [item["role"] for item in prepared] == calls[1]["selected_roles"]
+    data = make_result().model_dump(mode="json")
+    data["role_speeches"] = prepared
+    assert compact_content(data)["role_speeches"] == prepared
+    exported = MarkdownExporter().export(StructuredResult.model_validate(data))
+    assert all(role.value in exported for role in request.speaker_roles)
+    assert "Weighing:" in exported and "Opposition:" in exported
+
+
+@pytest.mark.asyncio
+async def test_update_regenerates_roles_after_case_change_and_preserves_scope():
+    service = DebateGeneratorService(Settings(_env_file=None), None)
+    original = make_result()
+    request = GenerateRequest(motion=original.motion, side="Proposition",
+                              speaker_roles=[SpeakerRole.second, SpeakerRole.third])
+    pack = PackDetail(generation_id="a"*32, request=request,
+        latest=GenerateResponse(structured_result=original, markdown_result=""),
+        created_at=datetime.now(), updated_at=datetime.now(),
+        expires_at=datetime.now()+timedelta(days=360))
+    calls = []
+    async def model(prompt, schema, **kwargs):
+        calls.append(schema)
+        if schema == ResearchPlan:
+            return ResearchPlan(queries=[f"rest evidence {i}" for i in range(5)])
+        if schema == PackPatch:
+            return PackPatch(change_summary="Clarified the case.", summary="Updated supported case.")
+        assert schema == RoleSpeechSet
+        return RoleSpeechSet(role_speeches=[role_speech(role) for role in request.speaker_roles])
+    async def research(req, queries):
+        return [], []
+    service.llm.generate_json = model
+    service.web_research.run = research
+    updated = await service.update_pack(pack, "Clarify the case.")
+    assert "role_speeches" in updated.changed_sections
+    assert [item.role for item in updated.structured_result.role_speeches] == request.speaker_roles
+    calls.clear()
+    limited = await service.update_pack(pack, "Clarify summary only.", sections=["summary"])
+    assert RoleSpeechSet not in calls
+    assert limited.changed_sections == ["summary"]
+    calls.clear()
+    scoped_roles = await service.update_pack(pack, "Prepare selected roles.", sections=["role_speeches"])
+    assert RoleSpeechSet in calls
+    assert scoped_roles.changed_sections == ["role_speeches"]
+
+
+@pytest.mark.asyncio
+async def test_word_export_uses_only_requested_role_and_accepts_all_sections():
+    SpeechExportRequest(role=SpeakerRole.fourth, sections=PACK_SECTIONS)
+    service = DebateGeneratorService(Settings(_env_file=None), None)
+    original = make_result()
+    original.role_speeches = RoleSpeechSet(role_speeches=[
+        role_speech(SpeakerRole.first), role_speech(SpeakerRole.fourth),
+    ]).role_speeches
+    async def model(prompt, schema, **kwargs):
+        context = json.loads(prompt)
+        assert [item["role"] for item in context["selected_material"]["role_speeches"]] == [SpeakerRole.fourth.value]
+        assert "BOTH proposition" in kwargs["system_prompt"]
+        return DebateSpeech(title="Reply", role=SpeakerRole.fourth.value, outline=["Weigh"], speech_text="Full reply.")
+    service.llm.generate_json = model
+    await service.export_speech(original, SpeakerRole.fourth.value, PACK_SECTIONS)
 
 
 def test_complete_prose_and_evidence_are_not_truncated():

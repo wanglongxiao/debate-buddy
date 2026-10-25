@@ -22,8 +22,11 @@ short arguments, rebuttals, and role-specific Word speeches.
   topic-specific English queries, public web pages and academic sources.
 - **Case generation** with definitions, burdens, main arguments, clash
   analysis and attack-and-defense maps
-- **Individual speaker preparation** for first, second, third, and
-  reply/summary speakers
+- **Progressive speaker preparation** for every selected role, clearly labeled:
+  first speakers define and build the case; second speakers rebut and add a
+  distinct substantive; third speakers compare decisive clashes; reply/summary
+  speakers develop both sides' strongest cases and weigh impact, likelihood,
+  time frame and burdens. Role drafts update with the shared case and evidence.
 - **Role-based Word export**: select pack sections and your role to generate
   a timed speech, outline and selected source material in a real `.docx` file
 - **English, Chinese, and bilingual output**
