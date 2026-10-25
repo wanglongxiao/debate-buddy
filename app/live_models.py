@@ -51,15 +51,27 @@ class LiveTurn(BaseModel):
         return value.strip()
 
 
+class HeardArgument(BaseModel):
+    claim: str = Field(default="", max_length=240)
+    warrant: str = Field(default="", max_length=240)
+    impact: str = Field(default="", max_length=240)
+    missing_link: str = Field(default="", max_length=240)
+
+
 class TurnSummary(BaseModel):
     summary: str = Field(max_length=800)
     key_points: List[str] = Field(default_factory=list, max_length=6)
     evidence: List[str] = Field(default_factory=list, max_length=6)
     uncertainties: List[str] = Field(default_factory=list, max_length=4)
+    arguments: List[HeardArgument] = Field(default_factory=list, max_length=2)
 
 
 class LiveAdvice(BaseModel):
     mode: Literal["continue", "rebut", "question", "opening"] = "opening"
+    main_clash: str = Field(default="", max_length=300)
+    response_strategy: str = Field(default="", max_length=300)
+    weighing: str = Field(default="", max_length=400)
+    poi_hint: str = Field(default="", max_length=240)
     key_points: List[str] = Field(default_factory=list, max_length=3)
     flaws: List[str] = Field(default_factory=list, max_length=3)
     ready_to_say: str = Field(max_length=1500)

@@ -72,6 +72,11 @@ class KeyConcept(BaseModel):
 
 class MotionUnderstanding(BaseModel):
     plain_meaning: str
+    motion_type: str = ""
+    status_quo: str = ""
+    comparison_world: str = ""
+    actor_characterization: str = ""
+    judging_criterion: str = ""
     key_concepts: List[KeyConcept] = Field(default_factory=list)
     main_clash: str
     proposition_burden: str
@@ -93,6 +98,11 @@ class MainArgument(BaseModel):
     explanation: str
     evidence_direction: str
     practice_line: str
+    claim: str = ""
+    warrant: str = ""
+    impact: str = ""
+    comparison: str = ""
+    evidence_ids: List[str] = Field(default_factory=list)
 
 
 class OverallCaseStrategy(BaseModel):
@@ -109,6 +119,9 @@ class AttackDefenseItem(BaseModel):
     our_attack_or_risk: str
     our_response: str
     practice_line: str
+    response_type: str = ""
+    target_link: str = ""
+    weighing: str = ""
 
 
 class CrossFireQuestion(BaseModel):

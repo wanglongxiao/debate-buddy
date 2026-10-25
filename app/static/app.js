@@ -671,6 +671,11 @@ function section(number, title, body) {
 function renderMotion(data) {
   return `
     <p>${esc(data.plain_meaning)}</p>
+    ${[
+      ["Motion type", data.motion_type], ["Baseline", data.status_quo],
+      ["Comparison world", data.comparison_world], ["Actors / incentives", data.actor_characterization],
+      ["Judging criterion", data.judging_criterion],
+    ].filter(([, value]) => value).map(([label, value]) => `<p><strong>${label}:</strong> ${esc(value)}</p>`).join("")}
     <div class="key-line"><strong>Main clash:</strong> ${esc(data.main_clash)}</div>
     <h4>What each side must prove</h4>
     <p><strong>Proposition:</strong> ${esc(data.proposition_burden)}</p>
@@ -694,6 +699,11 @@ function renderStrategy(data) {
       <div class="argument-block">
         <h4>Argument ${index + 1}: ${esc(item.title)}</h4>
         <p>${esc(item.explanation)}</p>
+        ${[
+          ["Claim", item.claim], ["Why it follows", item.warrant],
+          ["Impact", item.impact], ["Compare both worlds", item.comparison],
+        ].filter(([, value]) => value).map(([label, value]) => `<p><strong>${label}:</strong> ${esc(value)}</p>`).join("")}
+        ${item.evidence_ids?.length ? `<p><strong>Evidence IDs:</strong> ${esc(item.evidence_ids.join(", "))}</p>` : ""}
         <p><strong>Evidence direction:</strong> ${esc(item.evidence_direction)}</p>
         <p class="practice-line">You can say: “${esc(item.practice_line)}”</p>
       </div>`).join("")}
@@ -703,7 +713,10 @@ function renderStrategy(data) {
 function renderAttackDefense(items) {
   return items.map(item => `<div class="argument-block">
     <p><strong>They may argue:</strong> ${esc(item.opponent_point)}</p>
+    ${item.response_type ? `<p><strong>Response approach:</strong> ${esc(item.response_type)}</p>` : ""}
+    ${item.target_link ? `<p><strong>Link to challenge:</strong> ${esc(item.target_link)}</p>` : ""}
     <p><strong>Respond:</strong> ${esc(item.our_response)}</p>
+    ${item.weighing ? `<p><strong>Weighing:</strong> ${esc(item.weighing)}</p>` : ""}
     ${item.our_attack_or_risk ? `<p class="evidence-limits">${esc(item.our_attack_or_risk)}</p>` : ""}
     ${item.practice_line ? `<p class="practice-line">${esc(item.practice_line)}</p>` : ""}
     </div>`).join("");

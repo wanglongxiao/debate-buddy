@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from app.live_models import LiveQuestion, LiveSession, LiveSetup, LiveTurn
 from app.llm_client import LLMConfigurationError, LLMResponseError
 from app.services.live import LiveCoach, transcribe_audio
+from app.services.debate_framework import prepared_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -69,12 +70,7 @@ def install_live_routes(app, settings, require_storage, get_repository):
             session.motion = pack.request.motion
             structured = pack.latest.structured_result
             # Snapshot important material so a pack expiry does not break this match.
-            session.prep_context = json.dumps({
-                "prepared_side": structured.side,
-                "strategy": structured.overall_case_strategy.model_dump(mode="json"),
-                "attack_defense": [p.model_dump(mode="json") for p in structured.attack_defense_map[:8]],
-                "evidence": [e.model_dump(mode="json") for e in structured.evidence_bank[:10]],
-            }, ensure_ascii=False)[:18000]
+            session.prep_context = prepared_snapshot(structured, session.speaking_round)
         await repository.create(user.user_id, session)
         return {"session": session.model_dump(mode="json", exclude={"prep_context"}), "records": []}
 

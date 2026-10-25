@@ -134,6 +134,12 @@ function recordNode(record) {
     header.append(node("span", roundName(record.round)), node("time", new Date(record.captured_at).toLocaleTimeString()));
     article.append(header, node("p", record.summary));
     if (record.key_points.length) article.append(bullets(record.key_points));
+    (record.arguments || []).forEach(argument => {
+      const chain = [["主张", argument.claim], ["发言中的理由", argument.warrant], ["影响", argument.impact]]
+        .filter(([, value]) => value).map(([label, value]) => `${label}：${value}`).join(" → ");
+      if (chain) article.append(node("p", chain));
+      if (argument.missing_link) article.append(node("p", `尚未解释：${argument.missing_link}`, "uncertain"));
+    });
     if (record.evidence.length) article.append(node("strong", "证据 · 发言者声称，待核实"), bullets(record.evidence));
     if (record.uncertainties.length) article.append(node("p", `需确认：${record.uncertainties.join("；")}`, "uncertain"));
     return article;
@@ -196,9 +202,13 @@ function showAdvice(advice, label, version, target = "live-advice") {
   const same = advice.mode === "continue";
   const question = target === "live-answer";
   if (target === "live-advice") el("advice-title").textContent = same ? "我方续讲" : advice.mode === "rebut" ? "对方反驳" : "回应建议";
+  if (advice.main_clash) panel.append(node("h3", "主要争点"), node("p", advice.main_clash));
+  if (advice.response_strategy) panel.append(node("h3", same ? "补强哪条论证链" : "回应方式与切入点"), node("p", advice.response_strategy));
   if (advice.key_points?.length) panel.append(node("h3", question ? "回答要点" : same ? "接下来展开的重点" : advice.mode === "rebut" ? "对方的关键观点 / 证据" : "准备重点"), bullets(advice.key_points));
   if (advice.flaws?.length) panel.append(node("h3", question ? "需留意的问题" : "可能的漏洞 / 证据疑点"), bullets(advice.flaws));
   panel.append(node("h3", question ? "教练回答" : same ? "可以接着说" : "可以这样回应"), node("div", advice.ready_to_say, "live-ready-line"));
+  if (advice.weighing) panel.append(node("h3", "为什么这个争点更重要"), node("p", advice.weighing));
+  if (advice.poi_hint) panel.append(node("p", `POI 提示：${advice.poi_hint}`, "uncertain"));
   if (advice.next_steps.length) panel.append(node("h3", question ? "可采取的行动" : same ? "后续发言顺序" : "反驳重点"), bullets(advice.next_steps));
   if (advice.questions.length) panel.append(node("h3", "可以追问"), bullets(advice.questions));
   const cited = advice.cited_record_ids.map(id => live.records.find(r => r.event_id === id)).filter(Boolean);
@@ -223,7 +233,7 @@ function showAdvice(advice, label, version, target = "live-advice") {
     panel.append(links);
   }
   if (target === "live-advice") {
-    live.advice = [...(advice.key_points || []), ...(advice.flaws || []), advice.ready_to_say, ...advice.next_steps, ...advice.questions].join("\n\n");
+    live.advice = [advice.main_clash, advice.response_strategy, ...(advice.key_points || []), ...(advice.flaws || []), advice.ready_to_say, advice.weighing, advice.poi_hint, ...advice.next_steps, ...advice.questions].filter(Boolean).join("\n\n");
     el("copy-advice").disabled = false;
     el("advice-status").textContent = label;
   } else el("question-status").textContent = label;

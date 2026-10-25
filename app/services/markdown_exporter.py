@@ -26,6 +26,14 @@ class MarkdownExporter:
         lines.extend([motion.plain_meaning, f"**Clash:** {motion.main_clash}",
                       f"**Proposition:** {motion.proposition_burden}",
                       f"**Opposition:** {motion.opposition_burden}"])
+        for label, value in [
+            ("Motion type", motion.motion_type), ("Baseline", motion.status_quo),
+            ("Comparison world", motion.comparison_world),
+            ("Actors / incentives", motion.actor_characterization),
+            ("Judging criterion", motion.judging_criterion),
+        ]:
+            if value:
+                lines.append(f"**{label}:** {value}")
         for item in result.definitions:
             lines.append(f"- **{item.term}:** {item.recommended_definition}")
         heading(2)
@@ -53,7 +61,12 @@ class MarkdownExporter:
         case = result.overall_case_strategy
         lines.append(case.one_sentence_stance)
         for item in case.main_arguments:
-            lines.extend([f"### {item.title}", item.explanation,
+            lines.extend([f"### {item.title}", item.explanation])
+            for label, value in [("Claim", item.claim), ("Why it follows", item.warrant),
+                                 ("Impact", item.impact), ("Comparison", item.comparison)]:
+                if value:
+                    lines.append(f"**{label}:** {value}")
+            lines.extend([f"**Evidence IDs:** {', '.join(item.evidence_ids)}" if item.evidence_ids else "",
                           f"**Evidence:** {item.evidence_direction}",
                           f'**You can say:** "{item.practice_line}"'])
         lines.append(f"**Main risk:** {case.most_vulnerable_argument}")
@@ -61,6 +74,10 @@ class MarkdownExporter:
         for item in result.attack_defense_map:
             lines.extend([f"**They may argue:** {item.opponent_point}",
                           f"**Respond:** {item.our_response}", ""])
+            for label, value in [("Response approach", item.response_type),
+                                 ("Link to challenge", item.target_link), ("Weighing", item.weighing)]:
+                if value:
+                    lines.append(f"**{label}:** {value}")
         heading(5)
         for item in result.cross_fire.questions:
             lines.extend([f"**Ask:** {item.question}",
