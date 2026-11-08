@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "defaultActionId": "web",
+  "actions": [
+    {
+      "id": "web",
+      "name": "Debate Buddy 本地服务",
+      "command": "PORT=8000 bash run_local.sh",
+      "cwd": ".",
+      "background": true,
+      "source": "agent",
+      "readiness": {
+        "outputPatterns": ["Application startup complete"],
+        "timeoutMs": 60000
+      },
+      "open": {
+        "type": "preview",
+        "url": "http://127.0.0.1:8000/"
+      }
+    }
+  ]
+}

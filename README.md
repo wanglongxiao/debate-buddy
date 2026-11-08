@@ -1,6 +1,6 @@
 # Debate Buddy
 
-**Live Demo:** [https://s7kuama4td669fv0835d5.apigateway-ap-southeast-1.apigw-byteplus.com/](https://s7kuama4td669fv0835d5.apigateway-ap-southeast-1.apigw-byteplus.com/)
+**Live Demo:** [https://skl1hhonvhakr2jhgsh81.apigateway-ap-southeast-1.apigw-byteplus.com/](https://skl1hhonvhakr2jhgsh81.apigateway-ap-southeast-1.apigw-byteplus.com/)
 
 Debate Buddy is an AI-powered debate research and practice assistant for
 students and teams. It turns a motion, side, speaking time, and selected speaker
@@ -55,6 +55,9 @@ short arguments, rebuttals, and role-specific Word speeches.
   25 seconds, stop to transcribe, edit appended text and submit; failed ASR can
   be retried without recording again
 - **Saved versions** with three snapshots and one-click restore
+- **Safe parallel preparation**: different users and packs run independently.
+  Overlapping writes to the same pack return a retryable conflict; renewable
+  TOS leases also protect updates during rolling deployments.
 - **Live generation progress** with current stage, source activity, elapsed
   time, input locking, and true request cancellation
 - **Live debate coaching** at `/live`: prepared or new motions, required side
@@ -175,7 +178,7 @@ summaries for a local copy. Questions and generated advice are not retained.
 | Service | How Debate Buddy Uses It |
 | --- | --- |
 | **BytePlus ModelArk** | Generates compact evidence-based packs, section updates, role speeches and live coaching. |
-| **BytePlus veFaaS** | Hosts the FastAPI application with elastic compute, request-level concurrency, and a minimum of one and maximum of two cloud instances. |
+| **BytePlus veFaaS** | Hosts the FastAPI application with one worker, request-level concurrency, and a minimum of one and maximum of one cloud instance. |
 | **BytePlus API Gateway** | Provides the public HTTPS endpoint, forwards all Web UI and API routes to veFaaS, and supports long-running generation requests. |
 | **BytePlus TOS** | Persists private user profiles, sessions, debate packs, messages, and versions across elastic instances, with 360-day lifecycle expiration for pack and session objects. |
 | **BytePlus IAM / STS** | Authenticates deployment operations through a local BytePlus CLI profile. Account access keys are never included in the application package. |
@@ -322,14 +325,35 @@ uvicorn app.main:app --reload --port 8000
 | `BYTEPLUS_AK` | With TOS | BytePlus access key; set only as a secret |
 | `BYTEPLUS_SK` | With TOS | BytePlus secret key; set only as a secret |
 | `TOS_REGION` | With TOS | TOS region, such as `ap-southeast-1` |
-| `TOS_BUCKET` | With TOS | Private TOS bucket name |
+| `TOS_BUCKET` | With TOS | Private TOS bucket name; current deployment uses `debatebuddy` |
 | `TOS_ENDPOINT` | With TOS | Native TOS endpoint; the app derives its S3-compatible endpoint |
-| `TOS_PREFIX` | No | Object prefix; defaults to `debate-buddy/v1` |
+| `TOS_PREFIX` | No | Object prefix; defaults to `debate-buddy` |
 | `DATA_RETENTION_DAYS` | No | Debate pack retention; defaults to 360 days |
 | `RULES_CACHE_PATH` | No | Debate rules cache path |
 
 Never commit real credentials. Use `.env` locally and veFaaS environment
 variables in production.
+
+For TOS, configure a private bucket in `ap-southeast-1`:
+
+```dotenv
+STORAGE_BACKEND=tos
+TOS_REGION=ap-southeast-1
+TOS_BUCKET=debatebuddy
+TOS_ENDPOINT=https://tos-ap-southeast-1.bytepluses.com
+TOS_PREFIX=debate-buddy
+```
+
+Enable 360-day expiration only for `<TOS_PREFIX>/packs/` and
+`<TOS_PREFIX>/sessions/`; keep `<TOS_PREFIX>/live/` permanent. Bucket names
+and object keys use the configured values. Changing the bucket or prefix
+selects a separate data location; existing records are not moved automatically.
+The local Run action follows `.env`, including `STORAGE_BACKEND`.
+
+Cloud pack mutations use a separate TOS lease for each user and pack. Leases
+renew every 60 seconds and can be reclaimed after 300 seconds if an instance
+crashes. Cancelling generation releases the lease. TOS requests run outside
+the event loop with 5-second connection and 20-second read timeouts.
 
 ## API
 

@@ -6,6 +6,7 @@ import hmac
 import json
 import secrets
 import uuid
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 from urllib.parse import urlsplit, urlunsplit
@@ -14,6 +15,7 @@ import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
 
+from app.config import DEFAULT_TOS_PREFIX
 from app.database import (
     PASSWORD_ITERATIONS,
     SESSION_DAYS,
@@ -31,6 +33,9 @@ from app.models import (
     UserProfile,
 )
 
+class PackOperationBusyError(RuntimeError):
+    pass
+
 
 class TosGenerationRepository:
     """TOS-backed repository using BytePlus's S3-compatible API."""
@@ -46,7 +51,7 @@ class TosGenerationRepository:
         endpoint: str,
         region: str,
         bucket: str,
-        prefix: str = "debate-buddy/v1",
+        prefix: str = DEFAULT_TOS_PREFIX,
         retention_days: int = 360,
         client: Any = None,
     ):
@@ -63,12 +68,83 @@ class TosGenerationRepository:
                 signature_version="s3v4",
                 s3={"addressing_style": "virtual"},
                 retries={"max_attempts": 4, "mode": "standard"},
+                connect_timeout=5,
+                read_timeout=20,
+                max_pool_connections=32,
             ),
         )
         self.region = region
 
     async def initialize(self) -> None:
         await asyncio.to_thread(self._initialize_sync)
+
+    @asynccontextmanager
+    async def pack_operation(self, user_id: str, generation_id: str):
+        """A renewable conditional-write lease also covers rolling deployments."""
+        key = self._key(f"operations/{user_id}/{generation_id}.json")
+        owner = uuid.uuid4().hex
+        acquire = asyncio.create_task(asyncio.to_thread(self._acquire_operation, key, owner))
+        try:
+            await asyncio.shield(acquire)
+        except asyncio.CancelledError:
+            with suppress(Exception):
+                await acquire
+                await asyncio.to_thread(self._release_operation, key, owner)
+            raise
+
+        operation = asyncio.current_task()
+
+        async def renew():
+            try:
+                while True:
+                    await asyncio.sleep(60)
+                    await asyncio.to_thread(self._renew_operation, key, owner)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Stop work before a stale lease could allow another writer.
+                operation.cancel()
+
+        renewal = asyncio.create_task(renew())
+        try:
+            yield
+        finally:
+            renewal.cancel()
+            with suppress(asyncio.CancelledError):
+                await renewal
+            await asyncio.shield(asyncio.to_thread(self._release_operation, key, owner))
+
+    def _operation_payload(self, owner: str) -> dict:
+        return {
+            "owner": owner,
+            "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=300)).isoformat(),
+        }
+
+    def _acquire_operation(self, key: str, owner: str) -> None:
+        current, etag = self._get_json(key)
+        if current and datetime.fromisoformat(current["expires_at"]) > datetime.now(timezone.utc):
+            raise PackOperationBusyError("This pack is being updated. Wait for it to finish and try again.")
+        try:
+            self._put_json(key, self._operation_payload(owner), etag, current is None)
+        except ClientError as exc:
+            if self._error_status(exc) in (409, 412):
+                raise PackOperationBusyError("This pack is being updated. Wait for it to finish and try again.") from exc
+            raise
+
+    def _renew_operation(self, key: str, owner: str) -> None:
+        current, etag = self._get_json(key)
+        if not current or current["owner"] != owner:
+            raise PackOperationBusyError("Pack update ownership was lost.")
+        self._put_json(key, self._operation_payload(owner), etag)
+
+    def _release_operation(self, key: str, owner: str) -> None:
+        current, etag = self._get_json(key)
+        if current and current["owner"] == owner:
+            try:
+                self.client.delete_object(Bucket=self.bucket, Key=key, IfMatch=etag)
+            except ClientError as exc:
+                if self._error_status(exc) not in (404, 409, 412):
+                    raise
 
     async def create_guest_session(
         self, *, now: Optional[datetime] = None
@@ -635,7 +711,11 @@ class TosGenerationRepository:
             }:
                 return None, None
             raise
-        body = response["Body"].read()
+        stream = response["Body"]
+        try:
+            body = stream.read()
+        finally:
+            stream.close()
         return json.loads(body.decode("utf-8")), response.get("ETag", "").strip('"')
 
     def _put_json(

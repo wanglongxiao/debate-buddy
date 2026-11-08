@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 APP_DIR = ROOT_DIR / "app"
+DEFAULT_TOS_PREFIX = "debate-buddy"
 
 
 class Settings(BaseSettings):
@@ -62,7 +63,7 @@ class Settings(BaseSettings):
     tos_region: str = "ap-southeast-1"
     tos_bucket: Optional[str] = None
     tos_endpoint: str = "https://tos-ap-southeast-1.bytepluses.com"
-    tos_prefix: str = "debate-buddy/v1"
+    tos_prefix: str = DEFAULT_TOS_PREFIX
 
     @property
     def llm_ready(self) -> bool:

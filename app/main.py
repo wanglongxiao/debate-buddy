@@ -1,7 +1,9 @@
 import asyncio
 import json
 import logging
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager, contextmanager, suppress
+from functools import wraps
+from inspect import signature
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -34,7 +36,7 @@ from app.models import (
 )
 from app.services.generator import DebateGeneratorService
 from app.skills.debate_rules import DebateRulesSkill
-from app.tos_repository import TosGenerationRepository
+from app.tos_repository import PackOperationBusyError, TosGenerationRepository
 
 SESSION_COOKIE = "debate_buddy_session"
 settings = get_settings()
@@ -74,6 +76,48 @@ live_repository = LiveRepository(generation_repository) if generation_repository
 live_storage_ready = False
 storage_ready = False
 storage_error: Optional[str] = None
+active_pack_operations = set()
+
+
+@contextmanager
+def pack_operation(user_id: str, generation_id: str):
+    """Reject overlapping writes to one pack without blocking other projects."""
+    key = (user_id, generation_id)
+    if key in active_pack_operations:
+        raise HTTPException(
+            409, "This pack is being updated. Wait for it to finish and try again."
+        )
+    active_pack_operations.add(key)
+    try:
+        yield
+    finally:
+        active_pack_operations.discard(key)
+
+
+def protect_pack_mutation(endpoint):
+    endpoint_signature = signature(endpoint)
+
+    @wraps(endpoint)
+    async def protected(*args, **kwargs):
+        values = endpoint_signature.bind(*args, **kwargs).arguments
+        repository, user = require_history(values["request"])
+        async with guarded_pack_operation(repository, user.user_id, values["generation_id"]):
+            return await endpoint(*args, **kwargs)
+
+    return protected
+
+
+@asynccontextmanager
+async def guarded_pack_operation(repository, user_id: str, generation_id: str):
+    with pack_operation(user_id, generation_id):
+        if isinstance(repository, TosGenerationRepository):
+            try:
+                async with repository.pack_operation(user_id, generation_id):
+                    yield
+            except PackOperationBusyError as exc:
+                raise HTTPException(409, str(exc)) from exc
+        else:
+            yield
 
 
 def mark_storage_unavailable(exc: Exception) -> None:
@@ -248,6 +292,8 @@ def progress_stream(
             raise
         except (LLMConfigurationError, LLMResponseError) as exc:
             await queue.put({"type": "error", "error": str(exc)})
+        except HTTPException as exc:
+            await queue.put({"type": "error", "error": str(exc.detail)})
         except Exception:
             logger.exception("Streaming generation failed")
             await queue.put(
@@ -485,6 +531,7 @@ async def get_history(generation_id: str, request: Request) -> PackDetail:
 
 
 @app.delete("/api/history/{generation_id}")
+@protect_pack_mutation
 async def delete_history(generation_id: str, request: Request) -> dict[str, bool]:
     repository, user = require_history(request)
     deleted = await repository.delete(user.user_id, generation_id)
@@ -497,6 +544,7 @@ async def delete_history(generation_id: str, request: Request) -> dict[str, bool
     "/api/history/{generation_id}/agent",
     response_model=PackDetail,
 )
+@protect_pack_mutation
 async def update_history_with_agent(
     generation_id: str,
     payload: AgentUpdateRequest,
@@ -535,16 +583,22 @@ async def update_history_with_agent_stream(
         raise HTTPException(status_code=404, detail="Debate pack not found or expired.")
 
     async def run(progress):
-        latest = await generator_service.update_pack(pack, payload.message, progress, sections=payload.sections)
-        updated = await repository.update_latest(
-            user.user_id, generation_id, latest, payload.message
-        )
-        if not updated:
-            raise RuntimeError("Debate pack no longer exists.")
-        result = await repository.get(user.user_id, generation_id)
-        if result is None:
-            raise RuntimeError("Debate pack no longer exists.")
-        return result
+        async with guarded_pack_operation(repository, user.user_id, generation_id):
+            current_pack = await repository.get(user.user_id, generation_id)
+            if current_pack is None:
+                raise HTTPException(404, "Debate pack no longer exists.")
+            latest = await generator_service.update_pack(
+                current_pack, payload.message, progress, sections=payload.sections
+            )
+            updated = await repository.update_latest(
+                user.user_id, generation_id, latest, payload.message
+            )
+            if not updated:
+                raise HTTPException(404, "Debate pack no longer exists.")
+            result = await repository.get(user.user_id, generation_id)
+            if result is None:
+                raise HTTPException(404, "Debate pack no longer exists.")
+            return result
 
     return progress_stream(run)
 
@@ -593,6 +647,7 @@ async def transcribe_input(request: Request, language: str = Query("zh", pattern
     "/api/history/{generation_id}/versions",
     response_model=PackVersion,
 )
+@protect_pack_mutation
 async def save_history_version(generation_id: str, request: Request) -> PackVersion:
     repository, user = require_history(request)
     version = await repository.save_version(user.user_id, generation_id)
@@ -605,6 +660,7 @@ async def save_history_version(generation_id: str, request: Request) -> PackVers
     "/api/history/{generation_id}/versions/{version_id}/restore",
     response_model=PackDetail,
 )
+@protect_pack_mutation
 async def restore_history_version(
     generation_id: str, version_id: str, request: Request
 ) -> PackDetail:
